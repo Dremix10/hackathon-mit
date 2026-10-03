@@ -1,0 +1,30 @@
+# Lab orchestrator ("PI"). The bundle root is the repo root.
+# First check, from this directory: omnigent run . -p "Say hello"
+spec_version: 1
+name: pi
+description: Principal-investigator orchestrator for the discovery loop.
+executor:
+  type: omnigent
+  config:
+    harness: claude-sdk
+instructions: pi.md
+os_env:
+  type: caller_process
+  cwd: .
+guardrails:                      # in a spec_version bundle, policies MUST live here (top-level `policies:` is ignored)
+  policies:
+    budget:
+      type: function
+      function:
+        path: omnigent.policies.builtins.cost.cost_budget
+        arguments:
+          max_cost_usd: 20.0
+          ask_thresholds_usd: [10.0]
+    cap_calls:
+      type: function
+      function:
+        path: omnigent.policies.builtins.safety.max_tool_calls_per_session
+        arguments:
+          limit: 300
+tools:
+  agents: [literature, experimenter, critic]

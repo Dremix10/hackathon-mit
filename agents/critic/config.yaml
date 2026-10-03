@@ -1,0 +1,8 @@
+spec_version: 1
+name: critic
+description: Independent, adversarial reviewer (different vendor from the PI and the other agents).
+executor:
+  type: omnigent
+  config:
+    harness: codex
+instructions: critic.md

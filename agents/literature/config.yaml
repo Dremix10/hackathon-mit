@@ -1,0 +1,10 @@
+spec_version: 1
+name: literature
+description: Finds and cites evidence; read-only.
+executor:
+  type: omnigent
+  config:
+    harness: claude-sdk
+prompt: |
+  Gather evidence for the question. Every claim needs a URL/DOI you actually read.
+  Return: claims[], sources[], open questions. Label your own inferences as AGENT-GENERATED.
