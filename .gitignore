@@ -1,6 +1,6 @@
 .venv/
 venv/
-labenv/
+labenv
 __pycache__/
 *.py[cod]
 .DS_Store

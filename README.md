@@ -11,7 +11,7 @@ Read these (the original PDFs have been removed from the repo):
 
 ## Setup
 
-Python 3.12 is pinned in `.python-version`. Dependencies, including Omnigent 0.16, are installed in `labenv`. Run everything from this directory. The agent specs (`config.yaml`, `pi.md`, `agents/`) live here with the code.
+Python 3.12 is pinned in `.python-version`. Dependencies, including Omnigent 0.16, are installed in a virtualenv that lives outside this directory. `labenv` in the repo is only a symlink to it. `omnigent run .` packs this whole directory into the agent bundle, and the server rejects symlinks and bundles over 10,000 files. A real virtualenv here fails that check (`labenv/bin/python3` is a link, and the env has far more than 10,000 files).
 
 ```bash
 source labenv/bin/activate
@@ -21,10 +21,12 @@ omnigent run . -p "Say hello"
 
 Credentials: the lab runs on CLI subscriptions, not API keys. `omnigent setup` signs in to a Claude subscription (PI, literature, experimenter) and a ChatGPT subscription through the Codex CLI (critic). An Anthropic API key is only a fallback for when the Claude CLI cannot be used. Never commit keys.
 
-Recreate the env later with [uv](https://docs.astral.sh/uv/):
+Recreate the env later with [uv](https://docs.astral.sh/uv/). Keep the real env outside the repo, then point `labenv` at it:
 
 ```bash
-UV_PROJECT_ENVIRONMENT=labenv uv sync
+mkdir -p "$HOME/.local/share/hackathon-mit"
+UV_PROJECT_ENVIRONMENT="$HOME/.local/share/hackathon-mit/labenv" uv sync
+ln -sfn "$HOME/.local/share/hackathon-mit/labenv" labenv
 ```
 
 Omnigent has to orchestrate the live workflow. Managed Databricks is optional. Docs: [install](https://omnigent.ai/quickstart/install) · [GitHub](https://github.com/omnigent-ai/omnigent) · [Databricks quickstart](https://developers.databricks.com/docs/omnigent/quickstart)

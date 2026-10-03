@@ -11,6 +11,13 @@ instructions: pi.md
 os_env:
   type: caller_process
   cwd: .
+  sandbox:
+    # Claude CLI opens /tmp/claude-<uid> (this Mac: uid 501). Omnigent's
+    # seatbelt grant uses $TMPDIR/claude-<uid>, which is /var/folders/.../T
+    # on macOS, so the open comes back EPERM. /tmp is a symlink; the
+    # resolved grant is /private/tmp/claude-501.
+    write_paths:
+      - /tmp/claude-501
 guardrails:                      # in a spec_version bundle, policies MUST live here (top-level `policies:` is ignored)
   policies:
     budget:

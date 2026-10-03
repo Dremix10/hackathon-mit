@@ -1,8 +1,51 @@
 spec_version: 1
 name: critic
-description: Independent, adversarial reviewer (different vendor from the PI and the other agents).
+description: Independent Codex reviewer. Can read experiments/ and research/ only.
 executor:
   type: omnigent
   config:
     harness: codex
 instructions: critic.md
+os_env:
+  type: caller_process
+  cwd: .
+  sandbox:
+    allow_network: false
+guardrails:
+  policies:
+    no_shell_or_write:
+      type: function
+      function:
+        path: omnigent.policies.builtins.cel.cel_policy
+        arguments:
+          expression: |
+            event.type == "tool_call" && event.data.name in [
+              "sys_os_shell", "sys_os_write", "sys_os_edit",
+              "Bash", "bash", "shell", "Shell", "terminal",
+              "Write", "Edit", "MultiEdit", "NotebookEdit",
+              "Read", "Glob", "Grep", "execute_code"
+            ]
+            ? {"result": "DENY", "reason": "Critic cannot run commands or write files."}
+            : {"result": "ALLOW"}
+    read_scope:
+      type: function
+      function:
+        path: omnigent.policies.builtins.cel.cel_policy
+        arguments:
+          expression: |
+            event.type == "tool_call" && event.data.name == "sys_os_read"
+            ? (
+              has(event.data.arguments.path)
+              && !event.data.arguments.path.contains("..")
+              && (
+                event.data.arguments.path == "experiments"
+                || event.data.arguments.path.startsWith("experiments/")
+                || event.data.arguments.path.startsWith("./experiments/")
+                || event.data.arguments.path == "research"
+                || event.data.arguments.path.startsWith("research/")
+                || event.data.arguments.path.startsWith("./research/")
+              )
+              ? {"result": "ALLOW"}
+              : {"result": "DENY", "reason": "Critic may only read experiments/ and research/."}
+            )
+            : {"result": "ALLOW"}

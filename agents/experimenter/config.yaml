@@ -4,23 +4,22 @@ description: Writes and runs experiment code; reports metrics.
 executor:
   type: omnigent
   config:
-    harness: claude-sdk          # Claude, so the critic (codex/GPT) is the only different vendor. See DECISIONS.md
+    harness: claude-sdk
 os_env:
   type: caller_process
   cwd: .
-# Human approval gate lives on the agent that actually executes. Verify the shell tool name
-# your harness emits (sys_os_shell for os_env tools) in a test session before relying on it.
 guardrails:
   policies:
-    approve_experiments:         # human approval gate (CEL must return a map; a bare bool abstains)
+    approve_experiments:
       type: function
       function:
         path: omnigent.policies.builtins.cel.cel_policy
         arguments:
-          expression: >-
-            event.type == "tool_call" && event.data.name == "sys_os_shell"
-            ? {"result": "ASK", "reason": "Human approval required before running commands/experiments."}
+          expression: |
+            event.type == "tool_call" && event.data.name in ["sys_os_shell", "Bash"]
+            ? {"result": "ASK", "reason": "Human approval required before running a command."}
             : {"result": "ALLOW"}
 prompt: |
-  Implement the approved experiment under experiments/, run it, and report metrics vs. baseline
+  Implement the approved experiment under experiments/. Do not create a virtualenv
+  or any environment directory in this repo. Run it and report metrics vs. baseline
   with exact commands, seeds, and output paths.
