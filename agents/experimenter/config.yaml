@@ -8,6 +8,12 @@ executor:
 os_env:
   type: caller_process
   cwd: .
+  sandbox:
+    # Same Claude temp dir and Keychain read as the PI. See config.yaml.
+    read_paths:
+      - ~/Library/Keychains
+    write_paths:
+      - /tmp/claude-501
 guardrails:
   policies:
     approve_experiments:

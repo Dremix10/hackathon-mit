@@ -16,3 +16,4 @@ Short ledger. Newest date last. Open items are the only unfinished work.
 - Experimenter commands ask a human first. The gate matches `sys_os_shell` (what `claude-sdk` actually calls) and `Bash`.
 - `labenv` is a symlink to `~/.local/share/hackathon-mit/labenv`. A real env in this directory breaks `omnigent run .` (symlinks, and bundles over 10,000 files). Do not create one here.
 - PI sandbox may write `/tmp/claude-501`. On this Mac the Claude CLI uses that path; Omnigent's default temp grant does not cover it, so startup returns EPERM.
+- PI and experimenter may read `~/Library/Keychains`. The Claude subscription token is in the Keychain. Without that read, the sandboxed CLI says "Not logged in" even though `claude auth status` outside the sandbox is logged in.

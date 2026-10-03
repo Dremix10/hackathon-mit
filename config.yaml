@@ -16,6 +16,11 @@ os_env:
     # seatbelt grant uses $TMPDIR/claude-<uid>, which is /var/folders/.../T
     # on macOS, so the open comes back EPERM. /tmp is a symlink; the
     # resolved grant is /private/tmp/claude-501.
+    # Login lives in the macOS Keychain (Claude Code-credentials), not in
+    # ~/.claude/.credentials.json. Without this read, the sandboxed CLI
+    # reports "Not logged in" even when `claude auth status` outside says yes.
+    read_paths:
+      - ~/Library/Keychains
     write_paths:
       - /tmp/claude-501
 guardrails:                      # in a spec_version bundle, policies MUST live here (top-level `policies:` is ignored)
