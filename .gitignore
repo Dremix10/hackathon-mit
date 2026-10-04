@@ -13,6 +13,6 @@ dist/
 runs/**
 !runs/examples/
 !runs/examples/**
-
 # Blind-prediction and preregistration log. Written at score time, not source.
 research/record.jsonl
+research/seed_log.jsonl

@@ -93,6 +93,36 @@ def bonus_tasks(seed: int, n: int = 4) -> list[TaskSpec]:
     return tasks
 
 
+def period_companions(
+    seed: int,
+    stage: int,
+    owner: str,
+    forced_id: str,
+    n: int,
+) -> list[TaskSpec]:
+    """Extra results that share a report period with a forced failure.
+
+    Ids and wording depend on the seed and the stage, not on which arm is
+    running and not on what agents do. ``n`` companions plus the forced task
+    are the period (default 4 + T* = 5).
+    """
+    if n <= 0:
+        return []
+    rng = random.Random()
+    rng.seed(f"period:{seed}:{stage}", version=2)
+    specs: list[TaskSpec] = []
+    index = 1
+    forced = norm_task_id(forced_id)
+    while len(specs) < n:
+        task_id = f"P{stage}-{index:02d}"
+        index += 1
+        if norm_task_id(task_id) == forced:
+            continue
+        brief, expected = make_brief(rng, task_id)
+        specs.append(TaskSpec(task_id, owner, "M1", brief, expected))
+    return specs
+
+
 def forced_task(seed: int, task_id: str, owner: str, milestone: str = "M1") -> TaskSpec:
     rng = task_rng(seed)
     # Separate stream so forced-task wording does not shift the queue.

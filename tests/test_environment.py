@@ -303,6 +303,8 @@ def test_cli_allocates_a_counter_and_hides_the_objective(tmp_path: Path, capsys)
             "controlled",
             "--out",
             str(tmp_path),
+            "--seed-log",
+            str(tmp_path / "seed_log.jsonl"),
         ]
     )
     assert code == 0
@@ -321,6 +323,8 @@ def test_cli_allocates_a_counter_and_hides_the_objective(tmp_path: Path, capsys)
             "pressure_only",
             "--out",
             str(tmp_path),
+            "--seed-log",
+            str(tmp_path / "seed_log.jsonl"),
         ]
     )
     assert code == 0

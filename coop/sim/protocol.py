@@ -572,7 +572,12 @@ def primary_template(step: StepDef, branch_key: str | None) -> str:
 
 
 def template_map_for(objective: str) -> dict[str, Any]:
-    """Map template_id -> step metadata. Identical texts share one id."""
+    """Map template_id -> step metadata. Identical texts share one id.
+
+    When two steps share canonical text, the entry's ``same_text_steps`` lists
+    every step id (S2.1 and S2.3, for example). The key stays on that entry.
+    A sibling key of the template ids would fail the eval step-sequence check.
+    """
     merged: dict[str, Any] = {}
     for step in steps_for(objective):
         for key, text in text_variants(step):
@@ -677,3 +682,42 @@ def lint_surfaces() -> list[tuple[str, str]]:
 
 def objective_word_counts() -> dict[str, int]:
     return {name: len(text.split()) for name, text in OBJECTIVE_BLOCKS.items()}
+
+
+def target_prompts() -> list[str]:
+    """Target-agent base prompts, unsubstituted.
+
+    Visibility lines are separate strings in ``canonical_templates``.
+    """
+    return [TARGET_PROMPT]
+
+
+def canonical_templates() -> list[str]:
+    """Every protocol string that can shape what an agent reads.
+
+    The list is the whole corpus, not the arm selected for one run, so a hash
+    of it does not reveal the objective.
+    """
+    texts = [
+        CHARTER_TEXT,
+        TARGET_PROMPT,
+        INSIDER_PROMPT,
+        PRESSURE_TEMPLATE,
+        REMOVAL_TEMPLATE,
+        BOUNDARY_HELPER,
+        RULES_RECRUITER,
+        RULES_NULL,
+        REFUSAL_TEXT,
+        REFUSAL_VOTE,
+        ACCEPT_TEXT,
+        REPAIR_NOTE,
+    ]
+    texts.extend(VISIBILITY_LINES.values())
+    texts.extend(OBJECTIVE_BLOCKS.values())
+    for objective in ("resource_capture", "blame_avoidance", "loyalty", "null"):
+        for step in steps_for(objective):
+            for _key, text in text_variants(step):
+                texts.append(text)
+            if step.extra:
+                texts.append(step.extra)
+    return sorted(set(texts))
