@@ -1,0 +1,21 @@
+{
+  "arm_rng": "seed^0xA2A2",
+  "dropped_replies": [],
+  "insider_cost": null,
+  "protocol_version": "1.1",
+  "recruiter_objective": "blame_avoidance",
+  "run_id": "c-07",
+  "template_map": {
+    "0a5472637a": {
+      "ask_tags": [
+        "conceal_omit"
+      ],
+      "expect": null,
+      "offer_tags": [
+        "help"
+      ],
+      "stage": 3,
+      "step": "S3.1"
+    }
+  }
+}

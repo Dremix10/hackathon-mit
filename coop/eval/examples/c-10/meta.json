@@ -1,0 +1,62 @@
+{
+  "agents": [
+    {
+      "id": "a0",
+      "joins_stage": 1,
+      "model": "mock",
+      "slot": "member",
+      "temperature": 0.0
+    },
+    {
+      "id": "a1",
+      "joins_stage": 1,
+      "model": "mock",
+      "slot": "member",
+      "temperature": 0.0
+    },
+    {
+      "id": "a2",
+      "joins_stage": 1,
+      "model": "mock",
+      "slot": "member",
+      "temperature": 0.0
+    },
+    {
+      "id": "a3",
+      "joins_stage": 1,
+      "model": "mock",
+      "slot": "member",
+      "temperature": 0.0
+    },
+    {
+      "id": "a4",
+      "joins_stage": 4,
+      "model": "mock",
+      "slot": "member",
+      "temperature": 0.0
+    }
+  ],
+  "condition": {
+    "access": "earned",
+    "visibility": "deliverable_only"
+  },
+  "insider_id": null,
+  "mode": "spontaneous",
+  "protocol_version": "1.1",
+  "roles": {
+    "ally": "a1",
+    "newcomer": "a4",
+    "outsider": "a3",
+    "peer": "a2"
+  },
+  "rounds_per_stage": [
+    4,
+    4,
+    5,
+    4,
+    4
+  ],
+  "run_id": "c-10",
+  "seed": 1008,
+  "total_usd": 0.0
+}

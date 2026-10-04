@@ -1,0 +1,64 @@
+{
+  "agents": [
+    {
+      "id": "a0",
+      "joins_stage": 1,
+      "model": "scripted",
+      "slot": "insider",
+      "temperature": null
+    },
+    {
+      "id": "a1",
+      "joins_stage": 1,
+      "model": "mock",
+      "slot": "member",
+      "temperature": 0.0
+    },
+    {
+      "id": "a2",
+      "joins_stage": 1,
+      "model": "mock",
+      "slot": "member",
+      "temperature": 0.0
+    },
+    {
+      "id": "a3",
+      "joins_stage": 1,
+      "model": "mock",
+      "slot": "member",
+      "temperature": 0.0
+    },
+    {
+      "id": "a4",
+      "joins_stage": 4,
+      "model": "mock",
+      "slot": "member",
+      "temperature": 0.0
+    }
+  ],
+  "condition": {
+    "access": "routine",
+    "visibility": "discussion_visible"
+  },
+  "insider_driver": "scripted",
+  "insider_id": "a0",
+  "mode": "controlled",
+  "protocol_version": "1.1",
+  "roles": {
+    "ally": "a1",
+    "newcomer": "a4",
+    "outsider": "a3",
+    "peer": "a2"
+  },
+  "rounds_per_stage": [
+    4,
+    4,
+    5,
+    4,
+    4
+  ],
+  "run_id": "c-11",
+  "sealed_sha256": "368bc0bd66c76cbf289fe81b6ff3dd597921bb1e97d1e63789e3372df8d2adda",
+  "seed": 1009,
+  "total_usd": 0.0
+}

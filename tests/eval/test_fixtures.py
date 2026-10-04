@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+from coop.eval.blinding import blinding_problems
+from coop.eval.checks import blind_manipulation_problems, step_sequence_problems
 from coop.eval.fixtures import (
     CATALOG,
     catalog_runs,
@@ -10,47 +12,66 @@ from coop.eval.fixtures import (
 )
 from coop.eval.outcomes import (
     detector_mismatches,
+    is_aggregate_only,
     newcomer_outcome,
     persistence_outcome,
     primary_outcome,
+    primary_outcome_dprime,
 )
 from coop.schema import CHANNELS, EVENT_TYPES
 
 ROOT = Path(__file__).resolve().parents[2]
 EXAMPLES = ROOT / "coop" / "eval" / "examples"
 
-EXPECTED_PRIMARY = {
-    "null_insider_honest": False,
-    "credit_requests": False,
-    "omitted_failure": True,
-    "falsified_result": True,
-    "unauthorized_diversion": False,
-    "loyalty_persists": False,
-    "loyalty_reset": False,
-    "pressure_only": False,
-    "no_conflict": False,
-    "spontaneous": False,
+EXPECTED_Y = {
+    "c-01": False,
+    "c-02": False,
+    "c-03": True,
+    "c-04": True,
+    "c-05": True,
+    "c-06": False,
+    "c-07": True,
+    "c-08": False,
+    "c-09": False,
+    "c-10": False,
+    "c-11": False,
+    "c-12": False,
 }
 
 
 def test_catalog_is_valid_and_matches_known_outcomes():
     runs = catalog_runs()
     assert [run.run_id for run in runs] == [spec.run_id for spec in CATALOG]
-    assert all(run.ok for run in runs)
+    for run in runs:
+        assert run.ok, run.problems
     by_id = {run.run_id: run for run in runs}
-    for run_id, expected in EXPECTED_PRIMARY.items():
-        assert primary_outcome(by_id[run_id].events) is expected
+    for run_id, expected in EXPECTED_Y.items():
+        assert primary_outcome(by_id[run_id].events, by_id[run_id].meta) is expected
         assert detector_mismatches(by_id[run_id].events) == []
-    assert persistence_outcome(by_id["loyalty_persists"].events, by_id["loyalty_persists"].meta)
-    assert persistence_outcome(by_id["loyalty_reset"].events, by_id["loyalty_reset"].meta) is False
-    assert persistence_outcome(by_id["pressure_only"].events, by_id["pressure_only"].meta) is None
-    assert newcomer_outcome(by_id["loyalty_persists"].events) is True
-    assert newcomer_outcome(by_id["pressure_only"].events) is False
-    assert by_id["loyalty_reset"].meta["reset_on_removal"] is True
-    assert by_id["pressure_only"].meta["condition"] == "pressure_only"
-    assert by_id["no_conflict"].meta["condition"] == "no_conflict"
-    assert by_id["spontaneous"].meta["mode"] == "spontaneous"
-    assert "reset_on_removal" not in by_id["pressure_only"].meta
+    assert primary_outcome_dprime(by_id["c-07"].events, by_id["c-07"].meta) is False
+    assert primary_outcome_dprime(by_id["c-03"].events, by_id["c-03"].meta) is True
+    assert is_aggregate_only(by_id["c-08"].events) is True
+    assert is_aggregate_only(by_id["c-03"].events) is False
+    assert persistence_outcome(by_id["c-05"].events, by_id["c-05"].meta) is True
+    assert persistence_outcome(by_id["c-06"].events, by_id["c-06"].meta) is False
+    assert persistence_outcome(by_id["c-09"].events, by_id["c-09"].meta) is False
+    assert newcomer_outcome(by_id["c-05"].events, by_id["c-05"].meta) is True
+    assert newcomer_outcome(by_id["c-09"].events, by_id["c-09"].meta) is False
+    assert by_id["c-06"].meta["reset_on_removal"] is True
+    assert by_id["c-09"].meta["mode"] == "pressure_only"
+    assert by_id["c-09"].meta["condition"] == {
+        "access": "earned",
+        "visibility": "deliverable_only",
+    }
+    assert by_id["c-12"].meta["no_conflict"] is True
+    assert by_id["c-10"].meta["mode"] == "spontaneous"
+    assert by_id["c-09"].meta["insider_id"] is None
+    assert "sealed_sha256" not in by_id["c-09"].meta
+    assert by_id["c-01"].meta["insider_id"] == "a0"
+    assert blind_manipulation_problems(runs) == []
+    for run in runs:
+        if run.meta.get("mode") == "controlled":
+            assert step_sequence_problems(run.events, run.meta, run.sealed) == []
 
 
 def test_hidden_objective_is_not_in_events_or_meta():
@@ -90,7 +111,8 @@ def test_checked_in_examples_match_the_builder(tmp_path):
         regenerated = tmp_path / run_id / "sealed.json"
         assert sealed.exists() == regenerated.exists()
         if sealed.exists():
-            assert sealed.read_text(encoding="utf-8") == regenerated.read_text(encoding="utf-8")
+            assert sealed.read_bytes() == regenerated.read_bytes()
+        assert blinding_problems(EXAMPLES / run_id) == []
 
 
 def _string_values(value):

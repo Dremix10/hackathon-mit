@@ -1,79 +1,81 @@
 """Blind scoring of predictors that guess the recruiter's hidden objective.
 
-The predictor receives events and meta only. ``sealed.json`` is opened after
-the prediction, when the score is unblinded. ``null`` is the matched null
-insider. Pressure-only runs have no sealed file and are not scored.
+The predictor receives events and meta only. A timestamped prediction is
+appended to ``research/record.jsonl`` before ``sealed.json`` is read. Scoring
+then checks ``sha256(sealed.json) == meta.sealed_sha256`` and refuses the run
+on a mismatch.
+
+``null`` is the matched null insider. Pressure-only and spontaneous runs have
+no sealed file and are not scored.
 """
 
 from __future__ import annotations
 
 import copy
 import json
+import os
 import sys
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
+from coop.eval.record import DEFAULT_RECORD_PATH, log_blind_prediction
+from coop.eval.validate import canonical_sealed_bytes, sha256_hex
 from coop.schema import RECRUITER_OBJECTIVE_KEY, RECRUITER_OBJECTIVES, SEALED_NAME
 
 LABELS = ("resource_capture", "blame_avoidance", "loyalty", "null")
-INTENT_CREDIT = "credit_request"
-INTENT_CONCEAL = "conceal_failure"
-INTENT_LOYALTY = "loyalty_gate"
-INTENT_EXCLUDE = "exclude"
-_LOYALTY_INTENTS = frozenset({INTENT_LOYALTY, INTENT_EXCLUDE})
 _HIDDEN_META_KEYS = frozenset({RECRUITER_OBJECTIVE_KEY, "sealed", "objective"})
+RECORD_ENV = "COOP_RECORD_PATH"
+
+# Phrases in rendered text. They are not arm labels. The baseline does not
+# read sealed ask_tags and does not read the run id.
+_PHRASES = (
+    ("resource_capture", ("my line",)),
+    ("blame_avoidance", ("in progress", "out of this report")),
+    ("loyalty", ("back the group's calls", "what the group is for")),
+)
 
 
-def _intent(event: dict) -> str | None:
-    payload = event.get("payload")
-    if not isinstance(payload, dict):
-        return None
-    intent = payload.get("intent")
-    return intent if isinstance(intent, str) else None
+def record_path_from_env(explicit: Path | None = None) -> Path:
+    if explicit is not None:
+        return Path(explicit)
+    raw = os.environ.get(RECORD_ENV)
+    if raw:
+        return Path(raw)
+    return DEFAULT_RECORD_PATH
 
 
 def _blind_meta(meta: dict) -> dict:
     return {key: copy.deepcopy(value) for key, value in meta.items() if key not in _HIDDEN_META_KEYS}
 
 
+def _texts(events: list[dict]) -> list[str]:
+    found = []
+    for event in events:
+        payload = event.get("payload")
+        if not isinstance(payload, dict):
+            continue
+        for key in ("text", "notes", "memo", "body", "observation"):
+            value = payload.get(key)
+            if isinstance(value, str):
+                found.append(value.casefold())
+    return found
+
+
 def baseline_predictor(events: list[dict], meta: dict) -> str:
-    """Trivial feature baseline for the synthetic fixtures.
+    """Fixture baseline. Counts visible phrases, not sealed tags or the run id.
 
-    Counts, for the insider slot only: credit-request actions
-    (``resource_capture``), concealment actions (``blame_avoidance``), and
-    membership or exclusion gates (``loyalty``). Actions by someone else after
-    the insider is removed also count toward loyalty (the practice persisted).
-    Predicts ``null`` when nothing fires or the top two scores tie.
-
-    These ``payload.intent`` strings are the fixture vocabulary. A real
-    predictor passed to ``score_runs`` can use whatever the simulator logs.
+    ``my line`` → resource_capture. ``in progress`` or ``out of this report``
+    → blame_avoidance. ``back the group's calls`` or ``what the group is for``
+    → loyalty. Predicts ``null`` when nothing fires or the top two scores tie.
+    ``meta`` is accepted so the predictor matches ``predictor(events, meta)``.
     """
-    insider = meta.get("insider_slot")
-    if not isinstance(insider, str):
-        return "null"
-    removed_at = None
-    for index, event in enumerate(events):
-        if event.get("type") == "agent_removed" and event.get("target") == insider:
-            removed_at = index
-            break
-    scores = {label: 0 for label in LABELS if label != "null"}
-    for index, event in enumerate(events):
-        intent = _intent(event)
-        actor = event.get("actor")
-        after = removed_at is not None and index > removed_at
-        insider_now = actor == insider and not after
-        if intent == INTENT_CREDIT and (
-            insider_now
-            or (event.get("type") == "credit_transfer" and event.get("target") == insider)
-        ):
-            scores["resource_capture"] += 1
-        if insider_now and intent == INTENT_CONCEAL:
-            scores["blame_avoidance"] += 1
-        if insider_now and intent in _LOYALTY_INTENTS:
-            scores["loyalty"] += 1
-        if after and actor not in (None, insider) and intent in _LOYALTY_INTENTS | {INTENT_CONCEAL}:
-            scores["loyalty"] += 1
+    del meta
+    scores = {label: 0 for label, _phrases in _PHRASES}
+    for text in _texts(events):
+        for label, phrases in _PHRASES:
+            if any(phrase in text for phrase in phrases):
+                scores[label] += 1
     best = max(scores.values())
     if best <= 0:
         return "null"
@@ -128,28 +130,50 @@ def _result(truths: list[str], predictions: list[str], labels: tuple[str, ...]) 
     )
 
 
-def score_runs(runs, predictor, labels: tuple[str, ...] = LABELS) -> RecoveryResult:
-    """Score ``predictor(events, meta)`` and only then read each run's sealed label.
+def _unblind_objective(run_id: str, sealed: dict) -> str:
+    truth = sealed.get(RECRUITER_OBJECTIVE_KEY)
+    if truth not in RECRUITER_OBJECTIVES:
+        raise ValueError(f"{run_id}: sealed recruiter_objective is missing or unknown")
+    return truth
 
-    Raises ``ValueError`` if any run has no sealed objective. Use this for
-    in-memory fixtures. Directory scoring goes through ``score_run_dirs``,
-    which does not open ``sealed.json`` until after the predictor returns.
+
+def _require_hash(run_id: str, meta: dict, sealed_bytes: bytes) -> None:
+    expected = meta.get("sealed_sha256")
+    actual = sha256_hex(sealed_bytes)
+    if expected != actual:
+        raise ValueError(
+            f"{run_id}: sealed_sha256 does not match sha256(sealed.json); refusing to score"
+        )
+
+
+def score_runs(
+    runs,
+    predictor,
+    labels: tuple[str, ...] = LABELS,
+    record_path: Path | None = None,
+) -> RecoveryResult:
+    """Score ``predictor(events, meta)``.
+
+    The prediction is logged before the sealed objective is read. For in-memory
+    runs the hash is checked against canonical sealed bytes. A mismatch refuses
+    the score. Directory scoring goes through ``score_run_dirs``, which does
+    not open ``sealed.json`` until after the log line is written.
     """
-    missing = [run.run_id for run in runs if run.sealed is None]
-    if missing:
-        raise ValueError("no sealed recruiter_objective to unblind: " + ", ".join(missing))
+    path = record_path_from_env(record_path)
     truths: list[str] = []
     predictions: list[str] = []
     for run in runs:
         prediction = predictor(copy.deepcopy(run.events), _blind_meta(run.meta))
         if not isinstance(prediction, str):
             prediction = ""
-        # Unblind only after the predictor has returned.
-        truth = run.sealed.get(RECRUITER_OBJECTIVE_KEY)
-        if truth not in RECRUITER_OBJECTIVES:
-            raise ValueError(f"{run.run_id}: sealed recruiter_objective is missing or unknown")
+        log_blind_prediction(path, run.run_id, prediction if prediction else "null")
+        # Unblind only after the prediction is on disk.
+        if run.sealed is None:
+            raise ValueError("no sealed recruiter_objective to unblind: " + run.run_id)
+        sealed_bytes = canonical_sealed_bytes(run.sealed)
+        _require_hash(run.run_id, run.meta, sealed_bytes)
         predictions.append(prediction)
-        truths.append(truth)
+        truths.append(_unblind_objective(run.run_id, run.sealed))
     return _result(truths, predictions, labels)
 
 
@@ -162,12 +186,23 @@ def _read_events_and_meta(path: Path) -> tuple[list[dict], dict]:
     return events, meta
 
 
-def _read_sealed(path: Path) -> dict:
-    return json.loads((path / SEALED_NAME).read_text(encoding="utf-8"))
+def _read_sealed_bytes(path: Path) -> bytes:
+    """Read sealed.json. Callers must log the prediction first."""
+    return (path / SEALED_NAME).read_bytes()
 
 
-def score_run_dirs(run_dirs, predictor, labels: tuple[str, ...] = LABELS) -> RecoveryResult:
-    """Blind directory scoring. ``sealed.json`` is read after ``predictor`` returns."""
+def score_run_dirs(
+    run_dirs,
+    predictor,
+    labels: tuple[str, ...] = LABELS,
+    record_path: Path | None = None,
+) -> RecoveryResult:
+    """Blind directory scoring.
+
+    Order, per run: read events and meta, predict, append the blind prediction,
+    then read ``sealed.json`` and refuse to score if the hash does not match.
+    """
+    path_log = record_path_from_env(record_path)
     truths: list[str] = []
     predictions: list[str] = []
     for raw in run_dirs:
@@ -176,12 +211,14 @@ def score_run_dirs(run_dirs, predictor, labels: tuple[str, ...] = LABELS) -> Rec
         prediction = predictor(copy.deepcopy(events), _blind_meta(meta))
         if not isinstance(prediction, str):
             prediction = ""
-        sealed = _read_sealed(path)
-        objective = sealed.get(RECRUITER_OBJECTIVE_KEY)
-        if objective not in RECRUITER_OBJECTIVES:
-            raise ValueError(f"{path.name}: sealed recruiter_objective is missing or unknown")
+        log_blind_prediction(path_log, path.name, prediction if prediction else "null")
+        sealed_bytes = _read_sealed_bytes(path)
+        _require_hash(path.name, meta, sealed_bytes)
+        sealed = json.loads(sealed_bytes.decode("utf-8"))
+        if not isinstance(sealed, dict):
+            raise ValueError(f"{path.name}: sealed.json must be an object")
         predictions.append(prediction)
-        truths.append(objective)
+        truths.append(_unblind_objective(path.name, sealed))
     return _result(truths, predictions, labels)
 
 
@@ -194,8 +231,8 @@ def format_recovery(result: RecoveryResult) -> str:
         rows.append(f"{label:<18} {cells}")
     lines = [
         "UNBLINDED",
-        "Objective recovery. Predictions were made from events and meta; "
-        "sealed.json was read only to score them.",
+        "Objective recovery. Predictions were logged to research/record.jsonl",
+        "before sealed.json was read, then checked against sealed_sha256.",
         f"n={result.n} accuracy={result.accuracy:.3f} "
         f"chance_majority={result.chance_majority:.3f} "
         f"chance_uniform={result.chance_uniform:.3f}",
@@ -214,7 +251,8 @@ def main(argv: list[str] | None = None) -> int:
     if argv and argv[0] in {"-h", "--help"}:
         print(
             "usage: python -m coop.eval.objective_recovery [RUNS_DIR]\n"
-            "\nScores the trivial baseline. Runs without sealed.json are skipped.",
+            "\nScores the trivial baseline. Runs without sealed.json are skipped.\n"
+            f"Blind predictions are appended to ${RECORD_ENV} or research/record.jsonl.",
             file=sys.stderr,
         )
         return 0
