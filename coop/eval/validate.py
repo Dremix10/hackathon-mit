@@ -9,24 +9,25 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from coop.eval.checks import no_conflict_flag
-from coop.schema import (
+from coop.eval.contract import (
+    ACCEPTED_EVENT_TYPES,
     ACCESS_LEVELS,
     CHANNELS,
+    DISCLOSURE_QUALITIES,
     EVENT_KEYS,
-    EVENT_TYPES,
     INSIDER_DRIVERS,
     INSIDER_ID_KEY,
     META_KEYS,
     MIN_ROUNDS_PER_STAGE,
     MODE_NO_CONFLICT_ALIAS,
     MODES,
-    OBS_HASH_KEY,
-    OBS_TEXT_KEY,
+    OBS_HASH_KEYS,
+    OBS_TEXT_KEYS,
     PROTOCOL_VERSION,
     RECRUITER_OBJECTIVE_KEY,
     RECRUITER_OBJECTIVES,
     REPORT_CLAIMED_KEY,
-    REPORT_TRUTH_KEY,
+    REPORT_TRUTH_KEYS,
     ROLE_KEYS,
     SEALED_HASH_KEY,
     SEALED_NAME,
@@ -114,10 +115,23 @@ def _check_report(event: dict, where: str, problems: list[str]) -> None:
     if not isinstance(ground_truth, dict):
         problems.append(f"{where}: report_submitted requires a ground_truth object")
         return
-    results = ground_truth.get(REPORT_TRUTH_KEY)
+    results = None
+    for key in REPORT_TRUTH_KEYS:
+        if key in ground_truth:
+            results = ground_truth.get(key)
+            break
     if not isinstance(results, list):
-        problems.append(f"{where}: ground_truth.results must be a list")
+        problems.append(
+            f"{where}: ground_truth.true_results (or results) must be a list"
+        )
         return
+    quality = ground_truth.get("disclosure_quality")
+    if quality is not None and quality not in DISCLOSURE_QUALITIES:
+        problems.append(
+            f"{where}: disclosure_quality must be per_task, aggregate_only, or empty"
+        )
+    if "period_counts" in ground_truth and not isinstance(ground_truth.get("period_counts"), dict):
+        problems.append(f"{where}: period_counts must be an object")
     truth_ids: set[str] = set()
     for index, item in enumerate(results):
         if not _result_item_ok(item):
@@ -145,7 +159,7 @@ def _check_event(event: dict, index: int, problems: list[str]) -> None:
         problems.append(f"{where}: t must be an int >= 0")
     if not _is_int(event["stage"]) or event["stage"] not in {1, 2, 3, 4, 5}:
         problems.append(f"{where}: stage must be an int in 1..5")
-    if event["type"] not in EVENT_TYPES:
+    if event["type"] not in ACCEPTED_EVENT_TYPES:
         problems.append(f"{where}: unknown event type {event['type']!r}")
     if event["actor"] is not None and not isinstance(event["actor"], str):
         problems.append(f"{where}: actor must be a string or null")
@@ -183,10 +197,16 @@ def _check_event(event: dict, index: int, problems: list[str]) -> None:
             problems.append(f"{where}: observation events must use channel system")
         if not isinstance(event["actor"], str) or not event["actor"]:
             problems.append(f"{where}: observation actor must be the agent id")
-        if not isinstance(payload.get(OBS_HASH_KEY), str) or not payload.get(OBS_HASH_KEY):
-            problems.append(f"{where}: observation payload.hash must be a non-empty string")
-        if not isinstance(payload.get(OBS_TEXT_KEY), str):
-            problems.append(f"{where}: observation payload.observation must be a string")
+        digest = next((payload.get(key) for key in OBS_HASH_KEYS if key in payload), None)
+        if not isinstance(digest, str) or not digest:
+            problems.append(
+                f"{where}: observation payload.sha256 (or hash) must be a non-empty string"
+            )
+        text = next((payload.get(key) for key in OBS_TEXT_KEYS if isinstance(payload.get(key), str)), None)
+        if not isinstance(text, str):
+            problems.append(
+                f"{where}: observation needs payload.rendered or a string payload.observation"
+            )
     if etype == "llm_call":
         if not isinstance(payload.get("model"), str) or not payload.get("model"):
             problems.append(f"{where}: llm_call payload.model must be a string")
@@ -236,7 +256,9 @@ def _observation_problems(events: list[dict], agents: list[dict]) -> list[str]:
             if joins_stage > stage:
                 continue
             removed = removed_at.get(agent_id)
-            if removed is None or removed >= t:
+            # The simulator observes the roster after a removal, so the
+            # removed agent is absent at the removal round itself.
+            if removed is None or removed > t:
                 expected.add(agent_id)
         actors = [
             event.get("actor")
@@ -315,13 +337,10 @@ def _check_meta(meta: object, problems: list[str]) -> list[str]:
             if not isinstance(agent.get("model"), str) or not agent.get("model"):
                 problems.append(f"meta.json agents[{index}].model must be a string")
             temperature = agent.get("temperature")
-            scripted = agent.get("model") == "scripted"
-            if temperature is None:
-                if not scripted:
-                    problems.append(
-                        f"meta.json agents[{index}].temperature may be null only for the scripted model"
-                    )
-            elif not _is_number(temperature):
+            # Null is the simulator's mock/scripted value. A numeric temperature
+            # is the pinned-model case. The manipulation check requires the
+            # non-insider values to match each other either way.
+            if temperature is not None and not _is_number(temperature):
                 problems.append(f"meta.json agents[{index}].temperature must be a number or null")
             if "slot" in agent and agent["slot"] is not None and not isinstance(agent["slot"], str):
                 problems.append(f"meta.json agents[{index}].slot must be a string")
@@ -472,9 +491,39 @@ def validate_components(
     return problems
 
 
-def load_run(path: Path) -> Run:
-    """Load one run directory. Schema problems are returned on the Run, not raised."""
+def load_events_file(path: Path) -> Run:
+    """Load one events jsonl that has no sibling meta or sealed file.
+
+    Golden traces from the simulator are stored this way. Event schema is
+    checked. The run is not a confirmatory sample: ``meta.events_only`` is set
+    and the directory name (the file stem) is the run id, even when every
+    event is stamped ``c-golden``.
+    """
     path = Path(path)
+    events, problems = _read_jsonl(path)
+    for index, event in enumerate(events):
+        if isinstance(event, dict):
+            _check_event(event, index, problems)
+        else:
+            problems.append(f"events[{index}] must be an object")
+    if not events:
+        problems.append("events jsonl has no events")
+    meta = {"run_id": path.stem, "events_only": True}
+    return Run(
+        run_id=path.stem,
+        path=path,
+        events=events,
+        meta=meta,
+        sealed=None,
+        problems=problems,
+    )
+
+
+def load_run(path: Path) -> Run:
+    """Load a run directory or a single events ``.jsonl`` file."""
+    path = Path(path)
+    if path.is_file():
+        return load_events_file(path)
     run_id = path.name
     problems: list[str] = []
     events: list[dict] = []
@@ -531,8 +580,12 @@ def load_runs(root: Path) -> list[Run]:
     if not root.is_dir():
         return []
     runs: list[Run] = []
-    for child in sorted(path for path in root.iterdir() if path.is_dir()):
-        if any((child / name).exists() for name in ("events.jsonl", "meta.json", SEALED_NAME)):
+    for child in sorted(root.iterdir()):
+        if child.is_dir() and any(
+            (child / name).exists() for name in ("events.jsonl", "meta.json", SEALED_NAME)
+        ):
+            runs.append(load_run(child))
+        elif child.is_file() and child.suffix == ".jsonl":
             runs.append(load_run(child))
     return runs
 

@@ -60,7 +60,9 @@ _AGENT_MODULES = ("coop.agents.lint", "coop.agents.protocol")
 # Rendered strings only. Structural fields (slot, kind, task_id, model) are
 # not agent-visible prose. ``slot: "insider"`` is required meta, not a leak
 # into the workspace text.
-_TEXT_KEYS = ("text", "observation", "notes", "memo", "body")
+# ``rendered`` is the simulator's observation prose. ``content`` is a doc body.
+# A dict ``observation`` is structured state, not prose.
+_TEXT_KEYS = ("text", "rendered", "observation", "notes", "memo", "body", "content")
 
 
 def banned_patterns() -> list[str]:

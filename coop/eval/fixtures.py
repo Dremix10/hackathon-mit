@@ -25,7 +25,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from coop.eval.validate import Run, canonical_sealed_bytes, sha256_hex, validate_components
-from coop.schema import PROTOCOL_VERSION, RECRUITER_OBJECTIVE_KEY
+from coop.eval.contract import PROTOCOL_VERSION, RECRUITER_OBJECTIVE_KEY
 
 SLOT = "a0"
 ALLY = "a1"
@@ -585,7 +585,9 @@ def build_run(spec: FixtureSpec) -> Run:
             "private",
             {"text": "I will back the group's calls."},
         )
-    ctx.observe(5, 5, _present(5), "The roster for this round was updated.")
+    # Removal is recorded on this round. The post-removal roster is what gets
+    # an observation, matching the simulator.
+    ctx.observe(5, 5, [agent for agent in _present(5) if agent != SLOT], "The roster for this round was updated.")
 
     meta: dict = {
         "run_id": spec.run_id,

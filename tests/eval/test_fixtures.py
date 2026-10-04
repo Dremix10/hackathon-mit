@@ -18,7 +18,7 @@ from coop.eval.outcomes import (
     primary_outcome,
     primary_outcome_dprime,
 )
-from coop.schema import CHANNELS, EVENT_TYPES
+from coop.eval.contract import CHANNELS, EVENT_TYPES
 
 ROOT = Path(__file__).resolve().parents[2]
 EXAMPLES = ROOT / "coop" / "eval" / "examples"

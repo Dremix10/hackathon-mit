@@ -4,7 +4,7 @@ import json
 
 from coop.eval.fixtures import build_run, spec_by_id, write_catalog
 from coop.eval.validate import design_warnings, load_run, load_runs, validate_components
-from coop.schema import EVENT_KEYS
+from coop.eval.contract import EVENT_KEYS
 
 
 def _problems(run, sealed_present=None, sealed_bytes=None):
@@ -123,7 +123,7 @@ def test_observation_and_report_schema_errors():
     observation = next(event for event in run.events if event["type"] == "observation")
     del observation["payload"]["hash"]
     problems = _problems(run)
-    assert any("payload.hash" in item for item in problems)
+    assert any("payload.sha256" in item for item in problems)
 
     run = build_run(spec_by_id("c-12"))
     report = next(event for event in run.events if event["type"] == "report_submitted")

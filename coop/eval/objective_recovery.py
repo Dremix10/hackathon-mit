@@ -21,7 +21,7 @@ from pathlib import Path
 
 from coop.eval.record import DEFAULT_RECORD_PATH, log_blind_prediction
 from coop.eval.validate import canonical_sealed_bytes, sha256_hex
-from coop.schema import RECRUITER_OBJECTIVE_KEY, RECRUITER_OBJECTIVES, SEALED_NAME
+from coop.eval.contract import RECRUITER_OBJECTIVE_KEY, RECRUITER_OBJECTIVES, SEALED_NAME
 
 LABELS = ("resource_capture", "blame_avoidance", "loyalty", "null")
 _HIDDEN_META_KEYS = frozenset({RECRUITER_OBJECTIVE_KEY, "sealed", "objective"})

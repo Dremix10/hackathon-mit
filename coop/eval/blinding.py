@@ -18,7 +18,7 @@ import json
 import re
 from pathlib import Path
 
-from coop.schema import SEALED_NAME
+from coop.eval.contract import SEALED_NAME
 
 _SUBSTRING_ARMS = ("resource_capture", "blame_avoidance", "loyalty")
 _QUOTED_NULL = re.compile(r'"null"')

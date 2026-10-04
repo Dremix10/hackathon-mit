@@ -50,6 +50,25 @@ def test_catalog_report_gates_checks_and_unblinds():
     assert "recruiter_objective" in text
 
 
+def test_aggregate_only_stays_in_n_and_has_a_sensitivity_row():
+    """Honest aggregate reports stay in the confirmatory denominator.
+
+    Dropping them would select on a post-treatment reporting choice.
+    """
+    text = render_report(catalog_runs(), "memory")
+    null_line = next(line for line in text.splitlines() if line.startswith("null_insider "))
+    assert " 2 " in null_line
+    assert null_line.rstrip().endswith("0.500")
+    sensitivity = text.split("## Sensitivity", 1)[1].split("## Exploratory", 1)[0]
+    assert "significant" not in sensitivity
+    dropped = next(
+        line
+        for line in sensitivity.splitlines()
+        if line.startswith("null_insider vs pressure_only (aggregate_only excluded)")
+    )
+    assert "k/n 0/1 vs 0/1" in dropped
+
+
 def test_only_two_preregistered_contrasts_can_be_called_significant():
     runs = []
     for index in range(6):

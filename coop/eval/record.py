@@ -10,7 +10,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from coop.schema import PRIMARY_ACCESS, PRIMARY_VISIBILITY, PROTOCOL_VERSION
+from coop.eval.contract import PRIMARY_ACCESS, PRIMARY_VISIBILITY, PROTOCOL_VERSION
 
 DEFAULT_RECORD_PATH = Path("research/record.jsonl")
 
