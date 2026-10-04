@@ -29,9 +29,9 @@ The planner follows three steps and does not skip ahead. P0 is free: the protoco
 
 The experimenter dry-runs before any API call. Seeds 0–999 are for exploration, tuning, and pilots. Seeds 1000 and above are held out. `python -m coop.batch freeze` calls `coop.eval.record.log_preregistered_tests` and records the simulator config hash plus the held-out seed list. It refuses to write that row until the pilot spend log has a positive actual $/run. After the freeze, prompts, model, and temperature stay fixed. A confirmation batch refuses seeds >= 1000 without that row.
 
-The pilot is 10 real runs on dev seeds 4–13. Cell: earned × deliverable-only. Scripted insider. One pinned model (`claude-sonnet-5`) and temperature `0.0`. Split: one `resource_capture`, one `blame_avoidance`, one `loyalty`, three `null`, four `pressure_only`. These runs are never confirmatory. They measure real $/run, confirm T* and T** fire, check the manipulation-check gate on the real output, and list candidate behaviors.
+The pilot is 10 real runs on dev seeds 4–13. Cell: earned × deliverable-only. Scripted insider. One pinned model (`claude-sonnet-5`). Sampling stays at the model default: `--temperature default`, recorded as temperature null and `sampling` `model_default`. Split: one `resource_capture`, one `blame_avoidance`, one `loyalty`, three `null`, four `pressure_only`. These runs are never confirmatory. They measure real $/run, confirm T* and T** fire, check the manipulation-check gate on the real output, and list candidate behaviors.
 
-    python -m coop.batch dry-run --schedule pilot --batch-id pilot-001 --access earned --visibility deliverable_only --label-mode hidden --model claude-sonnet-5 --temperature 0.0 --rounds 4,4,5,4,4 --per-run-cap 3.0 --runs-root runs
+    python -m coop.batch dry-run --schedule pilot --batch-id pilot-001 --access earned --visibility deliverable_only --label-mode hidden --model claude-sonnet-5 --temperature default --rounds 4,4,5,4,4 --per-run-cap 3.0 --runs-root runs
 
 That writes `research/pending_batch.json`. The matching execute line is the one that file prints. It is prepared and not run. Run directories land in `runs/pilot-001/` and can be copied to `/workspace/hackathon/runs/pilot-001/`.
 
@@ -40,7 +40,7 @@ After the pilot (still not a confirmation):
     python -m coop.batch pilot-check --runs-root runs/pilot-001
     python -m coop.eval.report runs/pilot-001
     python -m coop.batch size --spend research/spend.md --pilot-runs runs/pilot-001
-    python -m coop.batch freeze --held-out-seeds pool --model claude-sonnet-5 --temperature 0.0 --spend research/spend.md --frozen-config research/frozen_config.json
+    python -m coop.batch freeze --held-out-seeds pool --model claude-sonnet-5 --temperature default --spend research/spend.md --frozen-config research/frozen_config.json
 
 `size` sets `n_per_group = floor((100 - pilot_spend - 10) / (3 * measured $/run))` from the pilot row in `research/spend.md`. It refuses when that actual is missing or zero. The printed main-batch command uses that many held-out seeds, three runs each (recruiter objective cycling, null, pressure-only). Do not treat a dry-run estimate as the measured rate.
 
@@ -50,12 +50,12 @@ Caps: $3 per episode, and `COOP_BUDGET_USD` for one batch. The spend log keeps a
 
 ## Cost
 
-Dry-run prices `CoopSim` observation text for target seats on `claude-sonnet-5` at $2 / $10 per million tokens. The scripted insider is not a call. Each call assumes at least 350 output tokens, then a 1.25 contingency. Mock traces cost $0.
+Dry-run prices `CoopSim` observation text for target seats on `claude-sonnet-5` at $2 / $10 per million tokens. The scripted insider is not a call. Each call on this model assumes 606 output tokens (350 reply floor plus 256 for a low-effort thinking block), then a 1.25 contingency. Mock traces cost $0.
 
-The 10-run pilot dry-run (seeds 4–13, the split above, batch `pilot-001`) prices at **$5.82** (778 calls, $4.66 before contingency), about **$0.58 per run**. That figure is an observation price, not the measured $/run, so `n_per_group` is still unknown. It is under the $25 approval threshold, so the execute command has no `--human-approved`. The per-run cap is $3. Set `COOP_BUDGET_USD=10` for this pilot. Do not execute until the owner confirms. Do not use seeds >= 1000 until the config is frozen.
+The 10-run pilot dry-run (seeds 4–13, the split above, batch `pilot-001`) prices at **$8.31** (778 calls, 606 assumed output tokens each, $6.65 before contingency), about **$0.83 per run**. That figure is an observation price, not the measured $/run, so `n_per_group` is still unknown. It is under the $25 approval threshold, so the execute command has no `--human-approved`. The per-run cap is $3. Set `COOP_BUDGET_USD=10` for this pilot. Do not execute until the owner confirms. Do not use seeds >= 1000 until the config is frozen.
 
 ```
-COOP_BUDGET_USD=10 python -m coop.batch execute --schedule pilot --access earned --visibility deliverable_only --label-mode hidden --model claude-sonnet-5 --temperature 0.0 --rounds 4,4,5,4,4 --per-run-cap 3.0 --runs-root runs --batch-id pilot-001
+COOP_BUDGET_USD=10 python -m coop.batch execute --schedule pilot --access earned --visibility deliverable_only --label-mode hidden --model claude-sonnet-5 --temperature default --rounds 4,4,5,4,4 --per-run-cap 3.0 --runs-root runs --batch-id pilot-001
 ```
 
 After that batch, in order, and still with no extra API calls from the check or the sizer:
@@ -64,7 +64,7 @@ After that batch, in order, and still with no extra API calls from the check or 
 python -m coop.batch pilot-check --runs-root runs/pilot-001
 python -m coop.eval.report runs/pilot-001
 python -m coop.batch size --spend research/spend.md --pilot-runs runs/pilot-001
-python -m coop.batch freeze --held-out-seeds pool --model claude-sonnet-5 --temperature 0.0 --spend research/spend.md --frozen-config research/frozen_config.json
+python -m coop.batch freeze --held-out-seeds pool --model claude-sonnet-5 --temperature default --spend research/spend.md --frozen-config research/frozen_config.json
 ```
 
 `size` prints the main-batch command with `n_per_group = floor((100 - pilot_spend - 10) / (3 * measured $/run))`. Run `python -m coop.eval.report runs/main-001` after that batch.

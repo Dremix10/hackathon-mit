@@ -10,6 +10,7 @@ from dataclasses import dataclass
 from typing import Any, Callable
 
 from coop.agents.pricing import approx_tokens, price_tokens
+from coop.agents.sampling import EFFORT_LOW, THINKING_ADAPTIVE, max_tokens_for, rejects_sampling
 from coop.schema import Action
 
 PostFn = Callable[[str, dict[str, str], dict[str, Any], float], dict[str, Any]]
@@ -78,28 +79,38 @@ class AnthropicLLM:
         self,
         model: str,
         api_key: str | None = None,
-        max_tokens: int = 512,
+        max_tokens: int | None = None,
         timeout: float = 60.0,
         post: PostFn | None = None,
         url: str = "https://api.anthropic.com/v1/messages",
     ):
         self.model = model
         self.api_key = api_key if api_key is not None else os.environ.get("ANTHROPIC_API_KEY", "")
-        self.max_tokens = max_tokens
+        self.max_tokens = max_tokens if max_tokens is not None else max_tokens_for(model)
         self.timeout = timeout
         self._post = post or _http_post
         self.url = url
 
-    def complete(self, *, system: str, user: str, temperature: float = 0.0) -> LLMResult:
-        if not self.api_key:
-            raise LLMError("ANTHROPIC_API_KEY is not set")
-        body = {
+    def request_body(self, *, system: str, user: str, temperature: float | None) -> dict[str, Any]:
+        """Messages body. Sampling fields are omitted when the model rejects them."""
+        body: dict[str, Any] = {
             "model": self.model,
             "max_tokens": self.max_tokens,
-            "temperature": temperature,
             "system": system,
             "messages": [{"role": "user", "content": user}],
         }
+        if rejects_sampling(self.model):
+            body["thinking"] = {"type": THINKING_ADAPTIVE}
+            body["output_config"] = {"effort": EFFORT_LOW}
+            return body
+        if temperature is not None:
+            body["temperature"] = temperature
+        return body
+
+    def complete(self, *, system: str, user: str, temperature: float | None = 0.0) -> LLMResult:
+        if not self.api_key:
+            raise LLMError("ANTHROPIC_API_KEY is not set")
+        body = self.request_body(system=system, user=user, temperature=temperature)
         headers = {
             "content-type": "application/json",
             "x-api-key": self.api_key,

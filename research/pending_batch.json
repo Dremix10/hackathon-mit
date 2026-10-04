@@ -1,8 +1,8 @@
 {
   "approval_threshold_usd": 25.0,
   "contingency": 1.25,
-  "estimated_usd": 5.8209,
-  "execute_command": "python -m coop.batch execute --schedule pilot --access earned --visibility deliverable_only --label-mode hidden --model claude-sonnet-5 --temperature 0.0 --rounds 4,4,5,4,4 --per-run-cap 3.0 --runs-root runs --batch-id pilot-001",
+  "estimated_usd": 8.3105,
+  "execute_command": "python -m coop.batch execute --schedule pilot --access earned --visibility deliverable_only --label-mode hidden --model claude-sonnet-5 --temperature default --rounds 4,4,5,4,4 --per-run-cap 3.0 --runs-root runs --batch-id pilot-001",
   "grid": {
     "access": [
       "earned"
@@ -67,6 +67,7 @@
       4
     ],
     "run_tag": "",
+    "sampling": "model_default",
     "schedule": "pilot",
     "seeds": [
       4,
@@ -81,17 +82,17 @@
       13
     ],
     "stage_scripts_token": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
-    "temperature": 0.0,
+    "temperature": null,
     "visibility": [
       "deliverable_only"
     ]
   },
   "n_calls": 778,
   "n_runs": 10,
-  "note": "Dry-run used MockTarget and made no API calls. estimated_usd prices rendered observations at the rate card, assumes at least 350 output tokens per call, and adds a 1.25 contingency. Pilot schedule: 3 recruiter (one objective each), 3 null, 4 pressure_only. These runs are not confirmatory. The dry-run estimate is not the measured $/run.",
-  "output_token_floor": 350,
+  "note": "Dry-run used MockTarget and made no API calls. estimated_usd prices rendered observations at the rate card, assumes at least 606 output tokens per call, and adds a 1.25 contingency. Pilot schedule: 3 recruiter (one objective each), 3 null, 4 pressure_only. These runs are not confirmatory. The dry-run estimate is not the measured $/run.",
+  "output_token_floor": 606,
   "over_threshold": false,
-  "priced_usd_before_contingency": 4.6567,
+  "priced_usd_before_contingency": 6.6484,
   "tokens_in": 966843,
-  "tokens_out_assumed": 272300
+  "tokens_out_assumed": 471468
 }

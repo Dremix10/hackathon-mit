@@ -14,12 +14,20 @@ from typing import Any
 
 from coop.agents.budget import Budget
 from coop.agents.budget import BudgetExceeded as LedgerBudgetExceeded
-from coop.agents.llm import MockLLM
+from coop.agents.llm import LLMError, MockLLM
 from coop.agents.member import MemberAgent
 from coop.agents.prompts import system_prompt_for
+from coop.agents.sampling import (
+    EFFORT_LOW,
+    SAMPLING_MODEL_DEFAULT,
+    THINKING_ADAPTIVE,
+    max_tokens_for,
+    rejects_sampling,
+)
 from coop.schema import RunConfig
 from coop.sim.env import BudgetExceeded as SimBudgetExceeded
 from coop.sim.env import CoopSim
+from coop.sim.llm import DriverError, is_retryable_status
 
 
 def run_episode(
@@ -51,9 +59,20 @@ def run_episode(
     meta["backend"] = backend_name
     meta["dry_run"] = dry_run
     # Eval accepts a string or null. A bool fails the manipulation-check loader.
-    meta["aborted"] = (abort_reason or meta.get("status") or "aborted") if aborted else None
-    meta["abort_reason"] = abort_reason
+    # A driver_failure keeps the simulator's abort_reason.
+    status = meta.get("status")
+    if aborted:
+        meta["aborted"] = abort_reason or status or "aborted"
+        if abort_reason:
+            meta["abort_reason"] = abort_reason
+    elif status not in (None, "complete"):
+        reason = meta.get("abort_reason")
+        meta["aborted"] = reason if isinstance(reason, str) and reason else str(status)
+    else:
+        meta["aborted"] = None
+        meta["abort_reason"] = None
     meta["total_cost_usd"] = meta.get("total_usd", 0.0)
+    _record_sampling(meta, config)
     if batch_id:
         meta["batch_id"] = batch_id
     (runs_root / config.run_id / "meta.json").write_text(
@@ -88,6 +107,8 @@ class LLMPolicy:
             if result is not None:
                 self._record(agent_id, result)
             raise
+        except LLMError as exc:
+            raise _driver_error(exc) from exc
         self._record(agent_id, result)
         return action
 
@@ -103,11 +124,50 @@ class LLMPolicy:
         )
 
 
+def _driver_error(exc: LLMError) -> DriverError:
+    """Hand an API failure to the simulator as ``DriverError``, not an action."""
+    text = str(exc)
+    code = None
+    marker = "Anthropic HTTP "
+    if marker in text:
+        tail = text.split(marker, 1)[1]
+        digits = []
+        for char in tail:
+            if char.isdigit():
+                digits.append(char)
+            else:
+                break
+        if digits:
+            code = int("".join(digits))
+    error_class = "HTTPError" if code is not None else type(exc).__name__
+    return DriverError(
+        text,
+        error_class=error_class,
+        status_code=code,
+        retryable=is_retryable_status(code, error_class),
+    )
+
+
 def _rendered(sim: CoopSim, agent_id: str) -> str:
     for event in reversed(sim.state.events):
         if event.get("type") == "observation" and event.get("actor") == agent_id:
             return str((event.get("payload") or {}).get("rendered") or "")
     return ""
+
+
+def _record_sampling(meta: dict[str, Any], config: RunConfig) -> None:
+    """Match the simulator: temperature null, sampling ``model_default``.
+
+    Per-agent temperature stays whatever the simulator wrote. The batch label
+    is the top-level pair. ``max_tokens`` and ``effort`` are the request we send.
+    """
+    if not rejects_sampling(config.model):
+        return
+    meta["temperature"] = None
+    meta["sampling"] = SAMPLING_MODEL_DEFAULT
+    meta["max_tokens"] = max_tokens_for(config.model)
+    meta["effort"] = EFFORT_LOW
+    meta["thinking"] = THINKING_ADAPTIVE
 
 
 def load_events(run_dir: Path) -> list[dict[str, Any]]:

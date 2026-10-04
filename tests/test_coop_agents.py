@@ -15,7 +15,8 @@ from coop.agents.detector import detector_id, omitted_failure_on_tstar
 from coop.agents.episode import load_events, run_episode
 from coop.agents.freeze import config_hash, matching_freeze
 from coop.agents.fallback_analysis import summarize, write_report
-from coop.agents.llm import AnthropicLLM, LLMResult, MockLLM, parse_action
+from coop.agents.failures import failure_reason
+from coop.agents.llm import AnthropicLLM, LLMError, LLMResult, MockLLM, parse_action
 from coop.agents.member import MemberAgent
 from coop.agents.plan import propose_candidates
 from coop.agents.schedule import PILOT_PAIRS, main_pairs, n_per_group, pilot_counts
@@ -29,7 +30,17 @@ from coop.agents.prompts import (
     recruiter_system,
     template_sources,
 )
-from coop.batch import CONTRAST_ARMS, PLANTED_REQUESTS, append_spend, main, team_total
+from coop.batch import (
+    CONTRAST_ARMS,
+    PLANTED_REQUESTS,
+    _grid,
+    _parser,
+    _resolve,
+    _sweep,
+    append_spend,
+    main,
+    team_total,
+)
 from coop.schema import OBJECTIVES, RunConfig
 from coop.sim.protocol import CHARTER_TEXT
 
@@ -111,13 +122,17 @@ class MockAndEpisodeTests(unittest.TestCase):
                 self.assertEqual(meta["insider_id"], "a0")
                 self.assertNotIn("arm", meta)
                 self.assertNotIn("recruiter_objective", meta)
-                self.assertNotIn("temperature", meta)
+                self.assertIsNone(meta["temperature"])
+                self.assertEqual(meta["sampling"], "model_default")
+                self.assertEqual(meta["effort"], "low")
+                self.assertGreaterEqual(meta["max_tokens"], 2048)
                 slot = next(agent for agent in meta["agents"] if agent["id"] == "a0")
                 self.assertEqual(slot["model"], "scripted")
                 self.assertIsNone(slot["temperature"])
                 others = [agent for agent in meta["agents"] if agent["id"] != "a0"]
                 self.assertTrue(all(agent["temperature"] is None for agent in others))
                 self.assertTrue(all(agent.get("sampling") == "model_default" for agent in others))
+                self.assertNotIn("sampling", slot)
                 sealed = json.loads((root / config.run_id / "sealed.json").read_text(encoding="utf-8"))
                 self.assertEqual(sealed["recruiter_objective"], "blame_avoidance")
                 self.assertIn("template_map", sealed)
@@ -429,10 +444,40 @@ class ControlsTests(unittest.TestCase):
         for arm in CONTRAST_ARMS:
             config = _config(arm=arm)
             self.assertEqual(config.model, "claude-sonnet-5")
-            self.assertEqual(config.temperature, 0.0)
+            self.assertIsNone(config.temperature)
             self.assertEqual(config.budget_usd, 3.0)
 
-    def test_anthropic_request_sends_temperature(self) -> None:
+    def test_sonnet5_omits_sampling_and_uses_low_effort(self) -> None:
+        captured: dict = {}
+
+        def post(url, headers, body, timeout):
+            del url, headers, timeout
+            captured["body"] = body
+            return {
+                "content": [
+                    {"type": "thinking", "thinking": "check the board"},
+                    {"type": "text", "text": '{"kind":"noop"}'},
+                ],
+                "usage": {"input_tokens": 3, "output_tokens": 2},
+                "model": "claude-sonnet-5",
+            }
+
+        result = AnthropicLLM(model="claude-sonnet-5", api_key="test-key", post=post).complete(
+            system="system",
+            user="user",
+            temperature=0.0,
+        )
+        body = captured["body"]
+        self.assertNotIn("temperature", body)
+        self.assertNotIn("top_p", body)
+        self.assertNotIn("top_k", body)
+        self.assertEqual(body["output_config"], {"effort": "low"})
+        self.assertEqual(body["thinking"], {"type": "adaptive"})
+        self.assertGreaterEqual(body["max_tokens"], 2048)
+        self.assertEqual(body["model"], "claude-sonnet-5")
+        self.assertEqual(result.text, '{"kind":"noop"}')
+
+    def test_older_model_still_sends_temperature(self) -> None:
         captured: dict = {}
 
         def post(url, headers, body, timeout):
@@ -441,16 +486,16 @@ class ControlsTests(unittest.TestCase):
             return {
                 "content": [{"type": "text", "text": '{"kind":"noop"}'}],
                 "usage": {"input_tokens": 3, "output_tokens": 2},
-                "model": "claude-sonnet-5",
+                "model": "claude-haiku-4-5",
             }
 
-        AnthropicLLM(model="claude-sonnet-5", api_key="test-key", post=post).complete(
+        AnthropicLLM(model="claude-haiku-4-5", api_key="test-key", post=post).complete(
             system="system",
             user="user",
-            temperature=0.0,
+            temperature=0.2,
         )
-        self.assertEqual(captured["body"]["temperature"], 0.0)
-        self.assertEqual(captured["body"]["model"], "claude-sonnet-5")
+        self.assertEqual(captured["body"]["temperature"], 0.2)
+        self.assertNotIn("thinking", captured["body"])
 
     def test_fallback_analysis_does_not_read_sealed(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -610,7 +655,7 @@ def _config(
         recruiter_objective=objective,
         insider_driver="scripted",
         rounds_per_stage=(4, 4, 5, 4, 4),
-        temperature=0.0,
+        temperature=None,
         model="claude-sonnet-5",
         budget_usd=3.0,
         run_id=f"c-{seed:04d}-{_RUN_SEQ:02d}",
@@ -745,7 +790,9 @@ class LedgerTests(unittest.TestCase):
     def test_config_hash_covers_temperature(self) -> None:
         one = config_hash(model="claude-sonnet-5", temperature=0.0, sim_git_sha="abc")
         two = config_hash(model="claude-sonnet-5", temperature=0.2, sim_git_sha="abc")
+        omitted = config_hash(model="claude-sonnet-5", temperature=None, sim_git_sha="abc")
         self.assertNotEqual(one, two)
+        self.assertNotEqual(one, omitted)
 
     def test_held_out_seeds_require_a_matching_freeze(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
@@ -759,7 +806,7 @@ class LedgerTests(unittest.TestCase):
                 "--model",
                 "claude-sonnet-5",
                 "--temperature",
-                "0",
+                "default",
                 "--runs-root",
                 str(root / "runs"),
                 "--pending",
@@ -782,7 +829,7 @@ class LedgerTests(unittest.TestCase):
                         "--model",
                         "claude-sonnet-5",
                         "--temperature",
-                        "0",
+                        "default",
                         "--record",
                         str(record),
                         "--spend",
@@ -801,7 +848,7 @@ class LedgerTests(unittest.TestCase):
                         "--model",
                         "claude-sonnet-5",
                         "--temperature",
-                        "0",
+                        "default",
                         "--record",
                         str(record),
                         "--measured-usd-per-run",
@@ -815,7 +862,13 @@ class LedgerTests(unittest.TestCase):
             record_text = record.read_text(encoding="utf-8")
             self.assertIn("preregistered_tests", record_text)
             self.assertIn("config_sha256", record_text)
-            self.assertEqual(main(["dry-run", *common, "--temperature", "0.4"]), 2)
+            self.assertIn('"sampling": "model_default"', record_text)
+            frozen = json.loads((root / "frozen_config.json").read_text(encoding="utf-8"))
+            self.assertIsNone(frozen["temperature"])
+            self.assertEqual(frozen["sampling"], "model_default")
+            with self.assertRaises(SystemExit) as caught:
+                main(["dry-run", *common, "--temperature", "0.4"])
+            self.assertEqual(caught.exception.code, 2)
             self.assertIsNone(
                 matching_freeze(
                     record,
@@ -834,7 +887,7 @@ class LedgerTests(unittest.TestCase):
                     record,
                     seeds=[1000],
                     model="claude-sonnet-5",
-                    temperature=0.0,
+                    temperature=None,
                 )
             )
 
@@ -953,13 +1006,14 @@ class RealRunPlanTests(unittest.TestCase):
                         "--model",
                         "claude-sonnet-5",
                         "--temperature",
-                        "0",
+                        "default",
                     ]
                 )
             self.assertEqual(code, 0)
             text = printed.getvalue()
             self.assertIn('"n_per_group": 11', text)
             self.assertIn("--schedule main", text)
+            self.assertIn("--temperature default", text)
             self.assertNotIn("--latin-square", text)
             self.assertIn("1000", text)
 
@@ -967,6 +1021,79 @@ class RealRunPlanTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             code = main(["pilot-check", "--runs-root", str(Path(tmp) / "missing")])
             self.assertEqual(code, 2)
+
+    def test_driver_error_or_bad_status_stops_the_batch(self) -> None:
+        self.assertIsNone(failure_reason([], {"status": "complete"}))
+        self.assertIn("driver_failure", failure_reason([], {"status": "driver_failure"}) or "")
+        self.assertIn(
+            "driver_error",
+            failure_reason([{"type": "driver_error", "payload": {}}], {"status": "complete"}) or "",
+        )
+        quiet = [{"type": "action_rejected", "payload": {"kind": "noop", "reason": "missing target"}}]
+        self.assertIsNone(failure_reason(quiet, {"status": "complete"}))
+        rejected = [{"type": "action_rejected", "payload": {"kind": "submit_task", "reason": "HTTP 400 temperature"}}]
+        self.assertIsNone(failure_reason(rejected * 5, {"status": "complete"}))
+
+    def test_failing_backend_marks_the_run_invalid_and_stops(self) -> None:
+        class _FailingBackend:
+            """Raises the HTTP 400 the live pilot hit. Never touches the network."""
+
+            model = "mock"
+
+            def complete(
+                self,
+                *,
+                system: str,
+                user: str,
+                temperature: float | None = None,
+            ) -> LLMResult:
+                del system, user, temperature
+                raise LLMError("Anthropic HTTP 400: temperature is deprecated for this model")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            args = _parser().parse_args(
+                [
+                    "dry-run",
+                    "--seeds",
+                    "0,1",
+                    "--arm",
+                    "null",
+                    "--model",
+                    "claude-sonnet-5",
+                    "--temperature",
+                    "default",
+                    "--runs-root",
+                    str(root / "runs"),
+                    "--pending",
+                    str(root / "pending.json"),
+                    "--ledger",
+                    str(root / "budget.json"),
+                ]
+            )
+            _resolve(args)
+            printed = io.StringIO()
+            with redirect_stderr(printed):
+                estimate = _sweep(
+                    args,
+                    _grid(args),
+                    backend_name="anthropic",
+                    dry_run=False,
+                    backend=_FailingBackend(),
+                )
+            self.assertIn("api_failure", estimate)
+            self.assertIn("Stopping the batch", printed.getvalue())
+            self.assertIn("No further runs were started", printed.getvalue())
+            self.assertFalse((root / "pending.json").exists())
+            run_dirs = [path for path in (root / "runs").iterdir() if path.is_dir()]
+            self.assertEqual(len(run_dirs), 1)
+            meta = json.loads((run_dirs[0] / "meta.json").read_text(encoding="utf-8"))
+            self.assertFalse(meta["valid"])
+            self.assertEqual(meta["status"], "driver_failure")
+            self.assertIsInstance(meta["aborted"], str)
+            events = load_events(run_dirs[0])
+            self.assertTrue(any(event.get("type") == "driver_error" for event in events))
+            self.assertFalse(any(event.get("type") == "action_rejected" for event in events))
 
 
 if __name__ == "__main__":

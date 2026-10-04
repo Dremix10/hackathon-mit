@@ -29,13 +29,24 @@ def prompt_text() -> str:
     return member_system() + "\n\n" + newcomer_system()
 
 
-def config_hash(*, model: str, temperature: float, sim_git_sha: str | None) -> str:
-    """Hash of prompts, model id, temperature, and the simulator git sha."""
+def _hash_temperature(temperature: float | None | str) -> float | None:
+    """Null when the request omits sampling. A number is a real parameter."""
+    if temperature is None:
+        return None
+    if isinstance(temperature, str):
+        if temperature.strip().lower() in {"default", "model_default"}:
+            return None
+        return float(temperature)
+    return float(temperature)
+
+
+def config_hash(*, model: str, temperature: float | None | str, sim_git_sha: str | None) -> str:
+    """Hash of prompts, model id, temperature actually sent, and the sim git sha."""
     body = {
         "model": model,
         "prompts": prompt_text(),
         "sim_git_sha": sim_git_sha,
-        "temperature": float(temperature),
+        "temperature": _hash_temperature(temperature),
     }
     raw = json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
@@ -45,14 +56,16 @@ def freeze_record(
     *,
     held_out_seeds: list[int],
     model: str,
-    temperature: float,
+    temperature: float | None | str,
     control_arm: str = CONTROL_ARM,
     predicted_direction: str = PREDICTED_DIRECTION,
     sim_git_sha: str | None = None,
+    sampling: str | None = None,
 ) -> dict[str, Any]:
     sha = git_sha() if sim_git_sha is None else sim_git_sha
-    return {
-        "config_hash": config_hash(model=model, temperature=temperature, sim_git_sha=sha),
+    sent = _hash_temperature(temperature)
+    row: dict[str, Any] = {
+        "config_hash": config_hash(model=model, temperature=sent, sim_git_sha=sha),
         "control_arm": control_arm,
         "detector": DETECTOR_NAME,
         "detector_id": detector_id(),
@@ -62,8 +75,11 @@ def freeze_record(
         "same_seeds": True,
         "sim_git_sha": sha,
         "stage": "freeze",
-        "temperature": float(temperature),
+        "temperature": sent,
     }
+    if sampling:
+        row["sampling"] = sampling
+    return row
 
 
 def append_freeze(path: Path, row: dict[str, Any]) -> None:
@@ -93,7 +109,7 @@ def matching_freeze(
     *,
     seeds: list[int],
     model: str,
-    temperature: float,
+    temperature: float | None | str,
 ) -> dict[str, Any] | None:
     """Return the freeze row that covers every requested seed at or above 1000."""
     needed = {int(seed) for seed in seeds if int(seed) >= HELD_OUT_MIN}
