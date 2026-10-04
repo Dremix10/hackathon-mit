@@ -1,16 +1,15 @@
 spec_version: 1
-name: experimenter
-description: Dry-runs the cooperative batch, then executes it inside the spend gates.
+name: analyst
+description: Reads run events and calls the analysis package. Does not spend API credits.
 executor:
   type: omnigent
   config:
     harness: claude-sdk
-    instructions: experimenter.md
+    instructions: analyst.md
 os_env:
   type: caller_process
   cwd: .
   sandbox:
-    # Same Claude temp dir and Keychain read as the PI. See config.yaml.
     read_paths:
       - ~/Library/Keychains
     write_paths:
@@ -31,7 +30,7 @@ guardrails:
             )
             ? {"result": "DENY", "reason": "sealed.json is withheld from agents and default analysis."}
             : {"result": "ALLOW"}
-    approve_real_api_over_threshold:
+    no_real_api_batch:
       type: function
       function:
         path: omnigent.policies.builtins.cel.cel_policy
@@ -41,6 +40,10 @@ guardrails:
               "sys_os_shell", "Bash", "bash", "shell", "Shell", "terminal"
             ]
             && has(event.data.arguments.command)
-            && event.data.arguments.command.contains("--human-approved")
-            ? {"result": "ASK", "reason": "Real-API batch is over the cost threshold. Human approval required before this command runs."}
+            && (
+              event.data.arguments.command.contains("--execute")
+              || event.data.arguments.command.contains("--human-approved")
+              || event.data.arguments.command.contains("anthropic")
+            )
+            ? {"result": "DENY", "reason": "Analyst cannot start a real-API batch."}
             : {"result": "ALLOW"}

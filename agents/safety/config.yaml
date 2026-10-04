@@ -1,16 +1,19 @@
 spec_version: 1
-name: critic
-description: Independent Codex reviewer. Can read experiments/, research/, and runs/ only.
+name: safety
+description: Policy gate. Asks a human before a real-API batch over the cost threshold.
 executor:
   type: omnigent
   config:
-    harness: codex
-instructions: critic.md
+    harness: claude-sdk
+    instructions: safety.md
 os_env:
   type: caller_process
   cwd: .
   sandbox:
-    allow_network: false
+    read_paths:
+      - ~/Library/Keychains
+    write_paths:
+      - /tmp/claude-501
 guardrails:
   policies:
     hide_sealed:
@@ -37,9 +40,9 @@ guardrails:
               "sys_os_shell", "sys_os_write", "sys_os_edit",
               "Bash", "bash", "shell", "Shell", "terminal",
               "Write", "Edit", "MultiEdit", "NotebookEdit",
-              "Read", "Glob", "Grep", "execute_code"
+              "execute_code"
             ]
-            ? {"result": "DENY", "reason": "Critic cannot run commands or write files."}
+            ? {"result": "DENY", "reason": "Safety reviews the estimate and does not run commands or write files."}
             : {"result": "ALLOW"}
     read_scope:
       type: function
@@ -52,17 +55,17 @@ guardrails:
               has(event.data.arguments.path)
               && !event.data.arguments.path.contains("..")
               && (
-                event.data.arguments.path == "experiments"
-                || event.data.arguments.path.startsWith("experiments/")
-                || event.data.arguments.path.startsWith("./experiments/")
-                || event.data.arguments.path == "research"
+                event.data.arguments.path == "research"
                 || event.data.arguments.path.startsWith("research/")
                 || event.data.arguments.path.startsWith("./research/")
                 || event.data.arguments.path == "runs"
                 || event.data.arguments.path.startsWith("runs/")
                 || event.data.arguments.path.startsWith("./runs/")
+                || event.data.arguments.path == "experiments"
+                || event.data.arguments.path.startsWith("experiments/")
+                || event.data.arguments.path.startsWith("./experiments/")
               )
               ? {"result": "ALLOW"}
-              : {"result": "DENY", "reason": "Critic may only read experiments/, research/, and runs/."}
+              : {"result": "DENY", "reason": "Safety may only read research/, runs/, and experiments/."}
             )
             : {"result": "ALLOW"}

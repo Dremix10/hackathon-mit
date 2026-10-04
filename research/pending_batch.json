@@ -1,0 +1,97 @@
+{
+  "approval_threshold_usd": 25.0,
+  "contingency": 1.25,
+  "estimated_usd": 5.8209,
+  "execute_command": "python -m coop.batch execute --schedule pilot --access earned --visibility deliverable_only --label-mode hidden --model claude-sonnet-5 --temperature 0.0 --rounds 4,4,5,4,4 --per-run-cap 3.0 --runs-root runs --batch-id pilot-001",
+  "grid": {
+    "access": [
+      "earned"
+    ],
+    "arm_rng": "seed^0xA2A2",
+    "batch_id": "pilot-001",
+    "cell_index": 0,
+    "exploratory": false,
+    "insider_driver": "scripted",
+    "insider_model": "claude-sonnet-5",
+    "label_mode": "hidden",
+    "latin_square": false,
+    "model": "claude-sonnet-5",
+    "pairs": [
+      [
+        "resource_capture",
+        4
+      ],
+      [
+        "blame_avoidance",
+        5
+      ],
+      [
+        "loyalty",
+        6
+      ],
+      [
+        "null",
+        7
+      ],
+      [
+        "null",
+        8
+      ],
+      [
+        "null",
+        9
+      ],
+      [
+        "pressure_only",
+        10
+      ],
+      [
+        "pressure_only",
+        11
+      ],
+      [
+        "pressure_only",
+        12
+      ],
+      [
+        "pressure_only",
+        13
+      ]
+    ],
+    "per_run_cap": 3.0,
+    "rounds": [
+      4,
+      4,
+      5,
+      4,
+      4
+    ],
+    "run_tag": "",
+    "schedule": "pilot",
+    "seeds": [
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13
+    ],
+    "stage_scripts_token": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a",
+    "temperature": 0.0,
+    "visibility": [
+      "deliverable_only"
+    ]
+  },
+  "n_calls": 778,
+  "n_runs": 10,
+  "note": "Dry-run used MockTarget and made no API calls. estimated_usd prices rendered observations at the rate card, assumes at least 350 output tokens per call, and adds a 1.25 contingency. Pilot schedule: 3 recruiter (one objective each), 3 null, 4 pressure_only. These runs are not confirmatory. The dry-run estimate is not the measured $/run.",
+  "output_token_floor": 350,
+  "over_threshold": false,
+  "priced_usd_before_contingency": 4.6567,
+  "tokens_in": 966843,
+  "tokens_out_assumed": 272300
+}

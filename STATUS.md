@@ -4,7 +4,7 @@ Live checklist for the submission. Tick items as they land, and log the reasonin
 
 **Deadline: Sunday, Oct 4, 2026, 9:00 AM ET (8:00 AM CT).** Late work cannot win. Hacking began Sat Oct 3, 1:00 PM ET.
 
-Last updated: Sun Oct 4, 2026.
+Last updated: Sun Oct 4, 2026. Simulator and the eval harness are on main. Member agents drive them on this branch. The real-run plan is a 10-run dev-seed pilot (3 recruiter, 3 null, 4 pressure-only), then a freeze, then a sized three-group held-out batch. None of those commands have been executed. `n_per_group` waits on the pilot's actual spend. A live `omnigent run` is still open.
 
 ## Check-ins (CT)
 
@@ -18,10 +18,10 @@ Last updated: Sun Oct 4, 2026.
 ## 1. Foundations (first 4 hours, now overdue)
 
 - [x] Science domain chosen (research cooperative of LLM agents; ground truth from the simulator)
-- [x] Question chosen and testable in 24 hours
-- [x] Bottleneck named (first member to shift the group off the charter)
-- [x] Measurable outcome and baseline defined (state violations vs an all-honest policy)
-- [x] Data access confirmed (the simulator generates the traces; no external dataset)
+- [x] Question chosen and testable in 24 hours (`research/protocol.md`)
+- [x] Bottleneck named (an agent's summary is not its objective; matched behavioral conditions are required, and each live replication spends API credits)
+- [x] Measurable outcome and baseline defined (state violations vs an all-honest policy; omitted-failure rate is the primary outcome)
+- [x] Data access confirmed (the simulator generates the traces; Anthropic key for live member calls; no external dataset)
 - [x] Domain, question, and data written into `README.md` and `AGENTS.md`
 
 ## 2. Lab setup
@@ -36,10 +36,10 @@ Last updated: Sun Oct 4, 2026.
 - [ ] Human approval gate on `sys_os_shell` fires under the `claude-sdk` harness
 - [ ] Critic confirmed to reach GPT, not Claude
 - [ ] Decide whether the critic gets read-only access to `experiments/` and `research/`
-- [ ] Omnigent policies and tool permissions enforce the human approval boundary
-- [ ] Shared research record, so every decision can be reconstructed
-- [ ] Planner has a budget and chooses between competing tests
-- [ ] Independent searches or experiments run in parallel
+- [x] Omnigent policies and tool permissions enforce the human approval boundary (ASK on `--human-approved`; safety agent is read-only)
+- [x] Shared research record (`research/protocol.md`, `research/record.md`), so every decision can be reconstructed
+- [x] Planner has a budget and chooses between competing tests (`python -m coop.batch candidates`, two scored options)
+- [ ] Independent searches or experiments run in parallel (the batch is sequential; parallel runs would share `runs/budget.json` under a file lock)
 
 ## 3. Discovery loop (next 14 hours)
 
