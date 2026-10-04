@@ -1,0 +1,33 @@
+{
+  "access": "earned",
+  "agents": [
+    {
+      "id": "ada",
+      "model": "mock",
+      "temp": 0.0
+    },
+    {
+      "id": "bea",
+      "model": "mock",
+      "temp": 0.0
+    },
+    {
+      "id": "cy",
+      "model": "mock",
+      "temp": 0.0
+    },
+    {
+      "id": "dee",
+      "model": "mock",
+      "temp": 0.0
+    }
+  ],
+  "condition": "earned_deliverable",
+  "insider_slot": "bea",
+  "mode": "controlled",
+  "reset_on_removal": false,
+  "run_id": "loyalty_persists",
+  "seed": 1005,
+  "total_cost_usd": 0.0,
+  "visibility": "deliverable"
+}

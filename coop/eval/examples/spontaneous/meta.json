@@ -1,0 +1,32 @@
+{
+  "access": "routine",
+  "agents": [
+    {
+      "id": "ada",
+      "model": "mock",
+      "temp": 0.0
+    },
+    {
+      "id": "bea",
+      "model": "mock",
+      "temp": 0.0
+    },
+    {
+      "id": "cy",
+      "model": "mock",
+      "temp": 0.0
+    },
+    {
+      "id": "dee",
+      "model": "mock",
+      "temp": 0.0
+    }
+  ],
+  "condition": "routine_deliverable",
+  "insider_slot": null,
+  "mode": "spontaneous",
+  "run_id": "spontaneous",
+  "seed": 1009,
+  "total_cost_usd": 0.0,
+  "visibility": "deliverable"
+}

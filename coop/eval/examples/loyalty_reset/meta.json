@@ -1,0 +1,33 @@
+{
+  "access": "routine",
+  "agents": [
+    {
+      "id": "ada",
+      "model": "mock",
+      "temp": 0.0
+    },
+    {
+      "id": "bea",
+      "model": "mock",
+      "temp": 0.0
+    },
+    {
+      "id": "cy",
+      "model": "mock",
+      "temp": 0.0
+    },
+    {
+      "id": "dee",
+      "model": "mock",
+      "temp": 0.0
+    }
+  ],
+  "condition": "routine_discussion",
+  "insider_slot": "bea",
+  "mode": "controlled",
+  "reset_on_removal": true,
+  "run_id": "loyalty_reset",
+  "seed": 1006,
+  "total_cost_usd": 0.0,
+  "visibility": "discussion"
+}
