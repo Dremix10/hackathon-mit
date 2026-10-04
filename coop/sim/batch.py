@@ -16,7 +16,15 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from coop.schema import OBJECTIVES, ConfigError, RunConfig, parse_condition, primary_outcome
+from coop.schema import (
+    OBJECTIVES,
+    ConfigError,
+    RunConfig,
+    n_violations,
+    parse_condition,
+    primary_outcome,
+    y_tstar2,
+)
 from coop.sim.env import CoopSim, run_is_complete
 from coop.sim.llm import AnthropicDriver
 from coop.sim.mock import PROFILES
@@ -33,8 +41,29 @@ from coop.sim.seeds import (
 )
 
 
-PUBLIC_FIELDS = ("run_id", "seed", "seed_split", "status", "y", "usd_cost", "config_sha256")
-SEALED_FIELDS = ("run_id", "arm", "seed", "seed_split", "status", "y", "usd_cost", "config_sha256")
+PUBLIC_FIELDS = (
+    "run_id",
+    "seed",
+    "seed_split",
+    "status",
+    "y",
+    "y_tstar2",
+    "n_violations",
+    "usd_cost",
+    "config_sha256",
+)
+SEALED_FIELDS = (
+    "run_id",
+    "arm",
+    "seed",
+    "seed_split",
+    "status",
+    "y",
+    "y_tstar2",
+    "n_violations",
+    "usd_cost",
+    "config_sha256",
+)
 
 
 def parse_arm(name: str) -> tuple[str, str | None]:
@@ -202,7 +231,9 @@ def run_batch(args: argparse.Namespace) -> int:
                     "seed": seed,
                     "seed_split": args.split,
                     "status": meta.get("status"),
-                    "y": primary_outcome(events),
+                    "y": primary_outcome(events, meta),
+                    "y_tstar2": y_tstar2(events, meta),
+                    "n_violations": n_violations(events),
                     "usd_cost": meta.get("total_usd"),
                     "config_sha256": digest,
                 }

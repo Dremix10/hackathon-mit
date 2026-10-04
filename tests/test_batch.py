@@ -52,6 +52,8 @@ def test_batch_summary_hides_the_arm(tmp_path: Path):
     assert {row["seed_split"] for row in rows} == {"heldout"}
     assert all(row["status"] == "complete" for row in rows)
     assert all(row["y"] in {"0", "1"} for row in rows)
+    assert all(row["y_tstar2"] in {"0", "1"} for row in rows)
+    assert all(row["n_violations"].isdigit() for row in rows)
     sealed = (out / "sealed_summary.csv").read_text(encoding="utf-8")
     assert "loyalty" in sealed
     assert "null" in sealed

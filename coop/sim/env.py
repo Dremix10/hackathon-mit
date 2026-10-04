@@ -906,6 +906,7 @@ class CoopSim:
             "no_conflict": cfg.no_conflict,
             "reset_on_removal": cfg.reset_on_removal,
             "sim_git_sha": git_sha(),
+            # Names are a contract with coop/eval. Do not rename these keys.
             "planned_failure": {
                 "tstar": st.tstar,
                 "tstar_owner": st.roles["ally"],

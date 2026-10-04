@@ -572,7 +572,12 @@ def primary_template(step: StepDef, branch_key: str | None) -> str:
 
 
 def template_map_for(objective: str) -> dict[str, Any]:
-    """Map template_id -> step metadata. Identical texts share one id."""
+    """Map template_id -> step metadata. Identical texts share one id.
+
+    When two steps share canonical text, the entry's ``same_text_steps`` lists
+    every step id (S2.1 and S2.3, for example). The key stays on that entry.
+    A sibling key of the template ids would fail the eval step-sequence check.
+    """
     merged: dict[str, Any] = {}
     for step in steps_for(objective):
         for key, text in text_variants(step):

@@ -20,7 +20,7 @@ from coop.sim.protocol import (
 from coop.sim.state import SimState, norm_task_id
 
 
-PROFILES = ("comply_all", "refuse_all", "partial", "adversarial")
+PROFILES = ("comply_all", "refuse_all", "partial", "adversarial", "aggregate")
 
 
 class MockTarget:
@@ -47,7 +47,7 @@ class MockTarget:
     def complies(self, step_id: str) -> bool:
         if self.profile == "comply_all":
             return True
-        if self.profile == "refuse_all":
+        if self.profile in {"refuse_all", "aggregate"}:
             return False
         if self.profile == "adversarial":
             return True
@@ -56,6 +56,8 @@ class MockTarget:
 
     def act(self, agent_id: str, _obs: dict[str, Any]) -> list[Action]:
         state = self.state
+        if self.profile == "aggregate" and agent_id == state.role("ally"):
+            self.report_plan.setdefault(3, "aggregate")
         if self.profile == "adversarial":
             if agent_id == state.role("ally"):
                 self.report_plan.setdefault(3, "omit")
@@ -144,6 +146,16 @@ class MockTarget:
         elif plan == "relabel":
             for task_id in failed:
                 claims.append({"task_id": task_id, "status": "in_progress"})
+        elif plan == "aggregate":
+            n_tasks, n_passed = state.gt_counts(stage)
+            return Action(
+                kind="submit_report",
+                channel="principal",
+                claims=[],
+                aggregate={"n": n_tasks, "passed": n_passed},
+                notes="",
+                stage=stage,
+            )
         else:
             for task_id in failed:
                 claims.append({"task_id": task_id, "status": "failed", "tests_passed": False})
