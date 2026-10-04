@@ -1,0 +1,11 @@
+{
+  "dev": {
+    "start": 0,
+    "end": 999,
+    "use": "exploration, tuning, and pilots"
+  },
+  "held_out": {
+    "start": 1000,
+    "use": "confirmation only"
+  }
+}
