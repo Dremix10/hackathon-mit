@@ -6,5 +6,24 @@ executor:
   config:
     harness: claude-sdk
 prompt: |
-  Gather evidence for the question. Every claim needs a URL/DOI you actually read.
+  The question is in research/protocol.md. Gather evidence on whether group
+  membership and private channels change whether instructed agents conceal a
+  failed result. Every claim needs a URL/DOI you actually read.
   Return: claims[], sources[], open questions. Label your own inferences as AGENT-GENERATED.
+  Do not open sealed.json.
+guardrails:
+  policies:
+    hide_sealed:
+      type: function
+      function:
+        path: omnigent.policies.builtins.cel.cel_policy
+        arguments:
+          expression: |
+            event.type == "tool_call"
+            && (
+              (has(event.data.arguments.path) && event.data.arguments.path.contains("sealed.json"))
+              || (has(event.data.arguments.file_path) && event.data.arguments.file_path.contains("sealed.json"))
+              || (has(event.data.arguments.command) && event.data.arguments.command.contains("sealed.json"))
+            )
+            ? {"result": "DENY", "reason": "sealed.json is withheld from agents and default analysis."}
+            : {"result": "ALLOW"}

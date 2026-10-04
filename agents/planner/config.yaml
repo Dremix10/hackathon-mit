@@ -1,0 +1,79 @@
+spec_version: 1
+name: planner
+description: Picks the next grid from the record. Compares two candidates under the budget.
+executor:
+  type: omnigent
+  config:
+    harness: claude-sdk
+    instructions: planner.md
+os_env:
+  type: caller_process
+  cwd: .
+  sandbox:
+    read_paths:
+      - ~/Library/Keychains
+    write_paths:
+      - /tmp/claude-501
+guardrails:
+  policies:
+    hide_sealed:
+      type: function
+      function:
+        path: omnigent.policies.builtins.cel.cel_policy
+        arguments:
+          expression: |
+            event.type == "tool_call"
+            && (
+              (has(event.data.arguments.path) && event.data.arguments.path.contains("sealed.json"))
+              || (has(event.data.arguments.file_path) && event.data.arguments.file_path.contains("sealed.json"))
+              || (has(event.data.arguments.command) && event.data.arguments.command.contains("sealed.json"))
+            )
+            ? {"result": "DENY", "reason": "sealed.json is withheld from agents and default analysis."}
+            : {"result": "ALLOW"}
+    no_api_spend:
+      type: function
+      function:
+        path: omnigent.policies.builtins.cel.cel_policy
+        arguments:
+          expression: |
+            event.type == "tool_call" && event.data.name in ["sys_os_shell", "Bash", "bash", "shell", "Shell", "terminal"]
+            && has(event.data.arguments.command)
+            && (
+              event.data.arguments.command.contains("--execute")
+              || event.data.arguments.command.contains("--human-approved")
+              || event.data.arguments.command.contains("--backend anthropic")
+            )
+            ? {"result": "DENY", "reason": "Planner cannot spend API credits. The experimenter runs batches."}
+            : {"result": "ALLOW"}
+    write_research_only:
+      type: function
+      function:
+        path: omnigent.policies.builtins.cel.cel_policy
+        arguments:
+          expression: |
+            event.type == "tool_call" && event.data.name in [
+              "sys_os_write", "sys_os_edit", "Write", "Edit", "MultiEdit", "NotebookEdit"
+            ]
+            ? (
+              (
+                has(event.data.arguments.path)
+                && !event.data.arguments.path.contains("..")
+                && (
+                  event.data.arguments.path == "research"
+                  || event.data.arguments.path.startsWith("research/")
+                  || event.data.arguments.path.startsWith("./research/")
+                )
+              )
+              || (
+                has(event.data.arguments.file_path)
+                && !event.data.arguments.file_path.contains("..")
+                && (
+                  event.data.arguments.file_path == "research"
+                  || event.data.arguments.file_path.startsWith("research/")
+                  || event.data.arguments.file_path.startsWith("./research/")
+                )
+              )
+              ? {"result": "ALLOW"}
+              : {"result": "DENY", "reason": "Planner may only write research/."}
+            )
+            : {"result": "ALLOW"}

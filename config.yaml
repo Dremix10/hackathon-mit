@@ -2,12 +2,12 @@
 # First check, from this directory: omnigent run . -p "Say hello"
 spec_version: 1
 name: pi
-description: Principal-investigator orchestrator for the discovery loop.
+description: Principal-investigator orchestrator for the cooperative-recruitment study.
 executor:
   type: omnigent
   config:
     harness: claude-sdk
-instructions: pi.md
+    instructions: pi.md
 os_env:
   type: caller_process
   cwd: .
@@ -25,6 +25,20 @@ os_env:
       - /tmp/claude-501
 guardrails:                      # in a spec_version bundle, policies MUST live here (top-level `policies:` is ignored)
   policies:
+    hide_sealed:
+      type: function
+      function:
+        path: omnigent.policies.builtins.cel.cel_policy
+        arguments:
+          expression: |
+            event.type == "tool_call"
+            && (
+              (has(event.data.arguments.path) && event.data.arguments.path.contains("sealed.json"))
+              || (has(event.data.arguments.file_path) && event.data.arguments.file_path.contains("sealed.json"))
+              || (has(event.data.arguments.command) && event.data.arguments.command.contains("sealed.json"))
+            )
+            ? {"result": "DENY", "reason": "sealed.json is withheld from agents and default analysis."}
+            : {"result": "ALLOW"}
     budget:
       type: function
       function:
@@ -38,5 +52,18 @@ guardrails:                      # in a spec_version bundle, policies MUST live 
         path: omnigent.policies.builtins.safety.max_tool_calls_per_session
         arguments:
           limit: 300
+    approve_real_api_over_threshold:
+      type: function
+      function:
+        path: omnigent.policies.builtins.cel.cel_policy
+        arguments:
+          expression: |
+            event.type == "tool_call" && event.data.name in [
+              "sys_os_shell", "Bash", "bash", "shell", "Shell", "terminal"
+            ]
+            && has(event.data.arguments.command)
+            && event.data.arguments.command.contains("--human-approved")
+            ? {"result": "ASK", "reason": "Real-API batch is over the cost threshold. Human approval required before this command runs."}
+            : {"result": "ALLOW"}
 tools:
-  agents: [literature, experimenter, critic]
+  agents: [planner, literature, experimenter, analyst, safety, critic]

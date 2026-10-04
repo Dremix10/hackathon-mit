@@ -16,4 +16,11 @@ do not move this total.
 - Total USD: 0.00.
 - Status: OK: $0.00 is under the $80 warning line.
 
-Refresh with `python -m coop.eval.spend RUNS_DIR --write research/spend.md`.
+Refresh the tally above with `python -m coop.eval.spend RUNS_DIR --write research/spend.md` only when you mean to replace this file. The batch ledger below is the running team total the driver reads. Warn above $80. Hard-stop at $100.
+
+## Batch ledger
+
+Running team total is the sum of actual_usd. Warn above $80. Hard-stop at $100.
+
+| when | kind | runs | model | estimated_usd | actual_usd | team_total_usd | note |
+| --- | --- | --- | --- | --- | --- | --- | --- |
