@@ -1,1 +1,1 @@
-{"access":"earned","config_sha256":"1eddcba4edd3ff4a7bd5875ad40b4b6ceb9856af1e2e1b7e0633e31fb9331554","max_actions_per_round":8,"model":"mock","period_size":5,"protocol_version":"1.1","rounds_per_stage":[4,4,5,4,4],"temperature":null,"visibility":"deliverable_only"}
+{"config_sha256":"be5df51d0c0b4c893751df6e73e52dc18122b167b78cf3c6ed264f6b35ccc9ac","model":"mock","rounds_per_stage":[4,4,5,4,4],"sim_code_sha256":"5140abe39018496de04faa6b74cad94168cac69cb5792cfb7d5314a6698c4908","temperature":null}

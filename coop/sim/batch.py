@@ -1,7 +1,7 @@
 """Run several matched episodes and write a blinded summary.
 
 Example:
-    python -m coop.sim.batch --arms loyalty,null,pressure_only --split heldout --n 2 --backend mock
+    python -m coop.sim.batch --arms loyalty,null,pressure_only --split held_out --n 2 --backend mock
 
 ``summary.csv`` has no arm column. ``sealed_summary.csv`` does.
 ``--resume`` skips pairs whose sealed row already has status complete.
@@ -16,13 +16,13 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from coop.eval.outcomes import primary_outcome as section6_outcome
 from coop.schema import (
     OBJECTIVES,
     ConfigError,
     RunConfig,
     n_violations,
     parse_condition,
-    primary_outcome,
     y_tstar2,
 )
 from coop.sim.env import CoopSim, run_is_complete
@@ -33,7 +33,9 @@ from coop.sim.seeds import (
     DEFAULT_FREEZE,
     DEFAULT_LOG,
     DEFAULT_REGISTRY,
+    SeedRegistry,
     append_log,
+    canonical_split,
     check_heldout,
     config_sha256,
     load_registry,
@@ -78,7 +80,12 @@ def parse_arm(name: str) -> tuple[str, str | None]:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Batch research-cooperative episodes.")
     parser.add_argument("--arms", required=True, help="Comma-separated arms. The objective stays out of summary.csv.")
-    parser.add_argument("--split", choices=["tuning", "heldout"], required=True)
+    parser.add_argument(
+        "--split",
+        choices=["dev", "held_out", "tuning", "heldout"],
+        required=True,
+        help="dev or held_out. tuning and heldout are aliases.",
+    )
     parser.add_argument("--n", type=int, required=True, help="How many unused seeds to draw. Each arm runs on each seed.")
     parser.add_argument("--backend", choices=["mock", "anthropic"], default="mock")
     parser.add_argument("--condition", default="earned_low_vis")
@@ -116,19 +123,30 @@ def _write_rows(path: Path, fields: tuple[str, ...], rows: list[dict[str, Any]])
             writer.writerow({key: row.get(key, "") for key in fields})
 
 
+def _split_label(value: str | None) -> str | None:
+    if value in {None, ""}:
+        return None
+    try:
+        return canonical_split(value)
+    except ConfigError:
+        return value
+
+
 def _batch_seeds(
     split: str,
     n: int,
-    registry: dict[str, list[int]],
+    registry: SeedRegistry,
     log_path: Path,
     prior_rows: list[dict[str, str]],
     resume: bool,
 ) -> list[int]:
     """Matched seeds. A resumed batch keeps seeds it already started."""
+    split = canonical_split(split)
     started: list[int] = []
     if resume:
         for row in prior_rows:
-            if row.get("seed_split") not in {None, "", split}:
+            label = _split_label(row.get("seed_split"))
+            if label not in {None, split}:
                 continue
             seed = int(row["seed"])
             if seed not in started:
@@ -136,7 +154,7 @@ def _batch_seeds(
     if len(started) >= n:
         return started[:n]
     used = used_seeds(log_path, split)
-    fresh = [seed for seed in registry[split] if seed not in started and seed not in used]
+    fresh = [seed for seed in registry.pools[split] if seed not in started and seed not in used]
     need = n - len(started)
     if len(fresh) < need:
         raise ConfigError(f"{split} has {len(fresh)} unused seeds, needed {need}")
@@ -159,6 +177,7 @@ def _policy(args: argparse.Namespace, seed: int):
 
 
 def run_batch(args: argparse.Namespace) -> int:
+    args.split = canonical_split(args.split)
     registry = load_registry(Path(args.registry))
     log_path = Path(args.seed_log)
     sealed_path_preview = Path(args.out) / "sealed_summary.csv"
@@ -231,7 +250,7 @@ def run_batch(args: argparse.Namespace) -> int:
                     "seed": seed,
                     "seed_split": args.split,
                     "status": meta.get("status"),
-                    "y": primary_outcome(events, meta),
+                    "y": int(section6_outcome(events, meta)),
                     "y_tstar2": y_tstar2(events, meta),
                     "n_violations": n_violations(events),
                     "usd_cost": meta.get("total_usd"),

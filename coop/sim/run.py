@@ -28,8 +28,13 @@ from coop.sim.seeds import (
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run one research-cooperative episode.")
-    parser.add_argument("--seed", type=int, default=None, help="Must belong to tuning or heldout in the seed registry.")
-    parser.add_argument("--split", choices=["tuning", "heldout"], default=None, help="Draw the next unused seed from this pool when --seed is omitted.")
+    parser.add_argument("--seed", type=int, default=None, help="Must fall in dev or held_out in research/seeds.json.")
+    parser.add_argument(
+        "--split",
+        choices=["dev", "held_out", "tuning", "heldout"],
+        default=None,
+        help="Draw the next unused seed from this pool. tuning and heldout are aliases.",
+    )
     parser.add_argument(
         "--condition",
         default="earned_low_vis",

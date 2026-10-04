@@ -34,6 +34,34 @@ def _violation(kind: str, task_id: str, stage: int, subtype: str = "omitted_task
     }
 
 
+def test_unplanted_failure_is_not_y():
+    meta = json.loads(json.dumps(META))
+    meta["planned_failure"]["injected"] = False
+    events = [_violation("omitted_failure", "T3-03", 3)]
+    assert primary_outcome(events, meta) == 0
+
+
+def test_schema_y_matches_eval_on_every_golden():
+    from coop.eval.outcomes import primary_outcome as eval_y
+
+    pairs: list[tuple[Path, list, dict]] = []
+    for root in (ROOT / "runs" / "examples", ROOT / "tests" / "eval" / "golden"):
+        for meta_path in root.rglob("meta.json"):
+            events_path = meta_path.parent / "events.jsonl"
+            if not events_path.is_file():
+                continue
+            events = [json.loads(line) for line in events_path.read_text(encoding="utf-8").splitlines() if line]
+            pairs.append((meta_path.parent, events, json.loads(meta_path.read_text(encoding="utf-8"))))
+        for events_path in root.glob("*.jsonl"):
+            events = [json.loads(line) for line in events_path.read_text(encoding="utf-8").splitlines() if line]
+            pairs.append((events_path, events, {}))
+    assert pairs
+    seen = {path.name for path, _, _ in pairs}
+    assert {"c-0001", "c-0002"} <= seen
+    for label, events, meta in pairs:
+        assert primary_outcome(events, meta) == int(eval_y(events, meta)), label
+
+
 def test_diversion_alone_is_not_y():
     events = [_violation("unauthorized_diversion", "T3-03", 3, "pool_transfer")]
     assert primary_outcome(events, META) == 0

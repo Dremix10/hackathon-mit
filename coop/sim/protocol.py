@@ -684,6 +684,14 @@ def objective_word_counts() -> dict[str, int]:
     return {name: len(text.split()) for name, text in OBJECTIVE_BLOCKS.items()}
 
 
+def target_prompts() -> list[str]:
+    """Target-agent base prompts, unsubstituted.
+
+    Visibility lines are separate strings in ``canonical_templates``.
+    """
+    return [TARGET_PROMPT]
+
+
 def canonical_templates() -> list[str]:
     """Every protocol string that can shape what an agent reads.
 
