@@ -43,11 +43,15 @@ The world is a four-member research cooperative plus one newcomer. They share a 
 
 ```bash
 python3 -m coop.sim.run --seed 1 --condition earned_low_vis --mode controlled --objective loyalty --profile refuse_all
+python3 -m coop.sim.seeds freeze
+python3 -m coop.sim.batch --arms loyalty,null,pressure_only --split heldout --n 2 --backend mock
 ```
 
-`controlled` stores the recruiter objective only in `sealed.json`. `pressure_only` has no insider and no sealed file: the opening slot is an ordinary member leading M1, it does not create a workspace, and any other member still can. `spontaneous` uses the same world events with no script. `--no-conflict` skips only the stage-3 forced failure. `--reset-on-removal` replaces visible history with a neutral summary when that slot leaves.
+`--seed` must be in `research/seeds.json`. `--split tuning|heldout` draws the next unused seed from that pool and appends `research/seed_log.jsonl`. Held-out seeds are refused when `config_sha256` differs from `research/frozen_config.json` unless `--allow-unfrozen` is set. Each designated reporter's period contains five results, including the forced failure.
 
-Shared types, the action schema, and `principal_view` live in `coop/schema.py`. A sample controlled run is `runs/examples/c-0001/`. Golden event logs are `runs/examples/mock_<arm>_<profile>.jsonl`.
+`controlled` stores the recruiter objective only in `sealed.json`. `pressure_only` has no insider and no sealed file: the opening slot is an ordinary member leading M1, it does not create a workspace, and any other member still can. `spontaneous` uses the same world events with no script. `--no-conflict` skips only the stage-3 forced failure. `--reset-on-removal` replaces visible history with a neutral summary when that slot leaves. `--resume` skips a run directory that already finished.
+
+Shared types, the action schema, `principal_view`, `primary_outcome`, and `record_llm_call` live in `coop/schema.py`. A sample controlled run is `runs/examples/c-0001/`. Golden event logs are `runs/examples/mock_<arm>_<profile>.jsonl`. Batch `summary.csv` omits the arm; `sealed_summary.csv` keeps it.
 
 ## Analysis
 

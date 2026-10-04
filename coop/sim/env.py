@@ -15,7 +15,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from coop.schema import Action, RunConfig, principal_view
+from coop.schema import Action, ConfigError, RunConfig, principal_view
 from coop.sim.insider import ScriptedInsider
 from coop.sim.mock import MockTarget
 from coop.sim.observe import observation_event
@@ -42,6 +42,7 @@ from coop.sim.tasks import (
     check_answer,
     forced_task,
     name_rng,
+    period_companions,
     planned_failure_ids,
     stage1_tasks,
 )
@@ -77,6 +78,8 @@ class CoopSim:
         self.policy = policy
         self.finished = False
         self.aborted = False
+        self.status = "complete"
+        self.abort_reason: str | None = None
         self.spent = 0.0
         self.global_cap = _global_cap()
         self.dropped_replies: list[dict[str, Any]] = []
@@ -188,16 +191,34 @@ class CoopSim:
     # --- run --------------------------------------------------------------
 
     def play(self) -> "CoopSim":
-        self.prepare()
-        while not self.finished:
-            self.open_round()
-            if self.finished:
-                break
-            obs = self.current_observations()
-            actions: dict[str, Any] = {}
-            for aid in self.target_ids():
-                actions[aid] = self.policy.act(aid, obs[aid])
-            self.apply_actions(actions)
+        self.status = "complete"
+        self.abort_reason = None
+        try:
+            self.prepare()
+            while not self.finished:
+                self.open_round()
+                if self.finished:
+                    break
+                obs = self.current_observations()
+                actions: dict[str, Any] = {}
+                for aid in self.target_ids():
+                    try:
+                        actions[aid] = self.policy.act(aid, obs[aid])
+                    except BudgetExceeded:
+                        raise
+                    except Exception as exc:
+                        self._reject(aid, "driver", f"driver error: {exc}")
+                        actions[aid] = []
+                self.apply_actions(actions)
+        except BudgetExceeded as exc:
+            self.status = "aborted_budget"
+            self.abort_reason = str(exc)
+            self.aborted = True
+            self.finished = True
+        except Exception as exc:
+            self.status = "error"
+            self.abort_reason = f"{type(exc).__name__}: {exc}"
+            self.finished = True
         return self
 
     def target_ids(self) -> list[str]:
@@ -219,25 +240,47 @@ class CoopSim:
         if r == 0:
             self._enter_stage(stage)
         if stage == 5 and r == 1 and not self.aborted:
-            self._force_failure(st.tstar2, st.role("newcomer") or "a4", "M1")
+            owner = st.role("newcomer") or "a4"
+            self._force_failure(st.tstar2, owner, "M1")
+            self._fill_period(5, owner, st.tstar2)
         if stage == 1 and r == 0:
             self._assign_stage1()
-        self._observations = {}
+            self._observations = {}
+        self._rendered = {}
         for aid in st.active_ids():
             ev = observation_event(st, aid)
             st.add_event(ev)
             self._observations[aid] = ev["payload"]["observation"]
+            self._rendered[aid] = ev["payload"]["rendered"]
         return self._observations
 
     def current_observations(self) -> dict[str, dict[str, Any]]:
         return getattr(self, "_observations", {})
 
+    def rendered_for(self, agent_id: str) -> str:
+        """Canonical model input for this round. Drivers should prefer this over the dict."""
+        return getattr(self, "_rendered", {}).get(agent_id, "")
+
     def apply_actions(self, actions: dict[str, Any]) -> None:
+        limit = self.config.max_actions_per_round
         for aid in sorted(actions):
             if aid in self.state.removed:
                 continue
-            for action in _as_actions(actions[aid]):
-                self.apply_action(aid, action)
+            for index, raw in enumerate(_action_items(actions[aid])):
+                if index >= limit:
+                    self._reject(aid, "limit", f"per-round limit is {limit}", raw=raw)
+                    continue
+                try:
+                    action = raw if isinstance(raw, Action) else Action.from_obj(raw)
+                except Exception as exc:
+                    self._reject(aid, "malformed", str(exc), raw=raw)
+                    continue
+                try:
+                    self.apply_action(aid, action)
+                except BudgetExceeded:
+                    raise
+                except Exception as exc:
+                    self._reject(aid, getattr(action, "kind", None) or "invalid", str(exc), raw=raw)
         self._insider_phase()
         self._catch_violations()
         self._round_i += 1
@@ -270,6 +313,7 @@ class CoopSim:
             self._assign(st.tstar, owner, "M1", bonus=False)
             if not st.no_conflict:
                 self._force_failure(st.tstar, owner, "M1")
+            self._fill_period(3, owner, st.tstar)
         if stage == 4:
             newcomer = st.role("newcomer") or "a4"
             self._emit(
@@ -360,6 +404,32 @@ class CoopSim:
             ground_truth={"expected_hidden": True},
         )
 
+    def _fill_period(self, stage: int, owner: str, forced_id: str) -> None:
+        """Pass extra tasks so the reporter's period is not a single failure."""
+        n = self.config.period_size - 1
+        for spec in period_companions(self.config.seed, stage, owner, forced_id, n):
+            self.state.answer_key[spec.task_id] = spec.expected
+            self.state.task_briefs[spec.task_id] = spec.brief
+            self._assign(spec.task_id, owner, spec.milestone, bonus=False)
+            self._emit(
+                type_="task_result",
+                actor=owner,
+                target=spec.task_id,
+                channel="public",
+                payload={
+                    "task_id": spec.task_id,
+                    "tests_passed": True,
+                    "status": "passed",
+                    "milestone": spec.milestone,
+                },
+                ground_truth={"forced": False, "period_fill": True},
+            )
+            self.state.board[norm_task_id(spec.task_id)] = {
+                "status": "passed",
+                "tests_passed": True,
+                "owner": owner,
+            }
+
     def _force_failure(self, task_id: str, owner: str, milestone: str) -> None:
         self._emit(
             type_="task_result",
@@ -409,11 +479,21 @@ class CoopSim:
                     self.apply_action(actor, action)
 
     def apply_action(self, actor: str, action: Action) -> None:
+        self._pending_raw = action
+        try:
+            self._apply_action(actor, action)
+        finally:
+            self._pending_raw = None
+
+    def _apply_action(self, actor: str, action: Action) -> None:
         kind = action.kind
         if kind in {None, "noop"}:
             return
         if kind == "message":
             channel = action.channel or "public"
+            if channel not in {"public", "private", "principal"}:
+                self._reject(actor, kind, f"channel {channel} is not allowed")
+                return
             self._emit(
                 type_="message",
                 actor=actor,
@@ -638,13 +718,16 @@ class CoopSim:
             ground_truth={"executor": actor},
         )
 
-    def _reject(self, actor: str, kind: str, reason: str) -> None:
+    def _reject(self, actor: str, kind: str | None, reason: str, raw: Any = None) -> None:
+        if raw is None:
+            raw = getattr(self, "_pending_raw", None)
+        payload: dict[str, Any] = {"kind": kind, "reason": reason, "raw": _jsonable_action(raw)}
         self._emit(
             type_="action_rejected",
             actor=actor,
             target=None,
             channel="system",
-            payload={"kind": kind, "reason": reason},
+            payload=payload,
             ground_truth=None,
         )
 
@@ -785,12 +868,18 @@ class CoopSim:
                 model, temperature = "scripted", None
             else:
                 model, temperature = cfg.model, cfg.temperature
+            if model == "scripted":
+                family = "scripted"
+            elif model == "mock":
+                family = "mock"
+            else:
+                family = "llm"
             entry: dict[str, Any] = {
                 "id": aid,
                 "name": st.names.get(aid, aid),
                 "model": model,
                 "temperature": temperature,
-                "family": "scripted" if model == "scripted" else "mock",
+                "family": family,
             }
             if controlled_slot:
                 entry["slot"] = "insider"
@@ -808,6 +897,12 @@ class CoopSim:
             "roles": dict(st.roles),
             "rounds_per_stage": list(cfg.rounds_per_stage),
             "total_usd": round(self.spent, 6),
+            "status": self.status,
+            "abort_reason": self.abort_reason,
+            "seed_split": cfg.seed_split if cfg.seed_split else _lookup_split(cfg.seed),
+            "config_sha256": _config_sha256(cfg),
+            "allow_unfrozen": bool(cfg.allow_unfrozen),
+            "period_size": cfg.period_size,
             "no_conflict": cfg.no_conflict,
             "reset_on_removal": cfg.reset_on_removal,
             "sim_git_sha": git_sha(),
@@ -862,6 +957,59 @@ class CoopSim:
 
     def principal_events(self) -> list[dict[str, Any]]:
         return principal_view(self.state.public_events(), self.config.visibility)
+
+
+def _config_sha256(config: RunConfig) -> str:
+    from coop.sim.seeds import config_sha256
+
+    return config_sha256(config)
+
+
+def _lookup_split(seed: int) -> str | None:
+    try:
+        from coop.sim.seeds import split_of
+
+        return split_of(seed)
+    except (OSError, json.JSONDecodeError, ConfigError):
+        return None
+
+
+def _jsonable_action(raw: Any) -> Any:
+    if raw is None:
+        return None
+    if isinstance(raw, Action):
+        data = raw.as_dict()
+    elif isinstance(raw, dict):
+        data = {k: v for k, v in raw.items() if k != "step_id"}
+    else:
+        return {"repr": repr(raw)[:500]}
+    data.pop("step_id", None)
+    try:
+        json.dumps(data)
+    except TypeError:
+        return {"repr": repr(raw)[:500]}
+    return data
+
+
+def _action_items(obj: Any) -> list[Any]:
+    if obj is None:
+        return []
+    if isinstance(obj, list):
+        return list(obj)
+    return [obj]
+
+
+def run_is_complete(directory: str | Path) -> bool:
+    path = Path(directory)
+    meta_path = path / "meta.json"
+    events_path = path / "events.jsonl"
+    if not meta_path.exists() or not events_path.exists():
+        return False
+    try:
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return False
+    return meta.get("status") == "complete"
 
 
 def _as_actions(obj: Any) -> list[Action]:

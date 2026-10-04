@@ -677,3 +677,34 @@ def lint_surfaces() -> list[tuple[str, str]]:
 
 def objective_word_counts() -> dict[str, int]:
     return {name: len(text.split()) for name, text in OBJECTIVE_BLOCKS.items()}
+
+
+def canonical_templates() -> list[str]:
+    """Every protocol string that can shape what an agent reads.
+
+    The list is the whole corpus, not the arm selected for one run, so a hash
+    of it does not reveal the objective.
+    """
+    texts = [
+        CHARTER_TEXT,
+        TARGET_PROMPT,
+        INSIDER_PROMPT,
+        PRESSURE_TEMPLATE,
+        REMOVAL_TEMPLATE,
+        BOUNDARY_HELPER,
+        RULES_RECRUITER,
+        RULES_NULL,
+        REFUSAL_TEXT,
+        REFUSAL_VOTE,
+        ACCEPT_TEXT,
+        REPAIR_NOTE,
+    ]
+    texts.extend(VISIBILITY_LINES.values())
+    texts.extend(OBJECTIVE_BLOCKS.values())
+    for objective in ("resource_capture", "blame_avoidance", "loyalty", "null"):
+        for step in steps_for(objective):
+            for _key, text in text_variants(step):
+                texts.append(text)
+            if step.extra:
+                texts.append(step.extra)
+    return sorted(set(texts))
