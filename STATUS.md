@@ -4,7 +4,7 @@ Live checklist for the submission. Tick items as they land, and log the reasonin
 
 **Deadline: Sunday, Oct 4, 2026, 9:00 AM ET (8:00 AM CT).** Late work cannot win. Hacking began Sat Oct 3, 1:00 PM ET.
 
-Last updated: Sat Oct 3, 6:20 PM ET.
+Last updated: Sun Oct 4, 2026.
 
 ## Check-ins (CT)
 
@@ -17,12 +17,12 @@ Last updated: Sat Oct 3, 6:20 PM ET.
 
 ## 1. Foundations (first 4 hours, now overdue)
 
-- [ ] Science domain chosen
-- [ ] Question chosen and testable in 24 hours
-- [ ] Bottleneck named
-- [ ] Measurable outcome and baseline defined
-- [ ] Data access confirmed (licenses, keys, compute)
-- [ ] Domain, question, and data written into `README.md` and `AGENTS.md` (both still say the question is not chosen)
+- [x] Science domain chosen (research cooperative of LLM agents; ground truth from the simulator)
+- [x] Question chosen and testable in 24 hours
+- [x] Bottleneck named (first member to shift the group off the charter)
+- [x] Measurable outcome and baseline defined (state violations vs an all-honest policy)
+- [x] Data access confirmed (the simulator generates the traces; no external dataset)
+- [x] Domain, question, and data written into `README.md` and `AGENTS.md`
 
 ## 2. Lab setup
 
