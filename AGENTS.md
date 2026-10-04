@@ -6,7 +6,7 @@ The Omnigent bundle is this directory: `config.yaml`, `pi.md`, and `agents/`. `p
 
 Read `docs/challenge-brief.md` and `docs/kickoff.md` before changing the lab. The original PDFs are no longer in the repo; those docs are the source of truth.
 
-Do not commit secrets. The scientific question is not chosen yet — do not invent a domain or a dataset until the user picks one.
+Do not commit secrets. The science question is chosen: can earned trust, perceived privacy, and group membership recruit LLM agents into violating and concealing violations of their original mandate, does that practice persist after the instigator leaves, and does an initiated agent initiate a newcomer? Ground truth is simulator state in `coop/sim/`, not agent summaries. Do not invent a different domain or dataset. The shared contract is `coop/schema.py`. Contract changes go in `DECISIONS.md`.
 
 Agent prompts live in `.md` files (`pi.md`, `agents/critic/critic.md`) and are referenced from `config.yaml` with `instructions:`. Keep them short and only ask agents to do what their tools allow.
 
