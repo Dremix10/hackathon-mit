@@ -54,7 +54,7 @@ Member agents live in `coop/agents/`. Omnigent (PI, planner, experimenter, analy
 ```bash
 source labenv/bin/activate
 python -m pytest tests -q
-python -m coop.batch dry-run --schedule pilot --batch-id pilot-001 --model claude-sonnet-5 --temperature 0.0
+python -m coop.batch dry-run --schedule pilot --batch-id pilot-001 --model claude-sonnet-5 --temperature default
 ```
 
 Mock contrast traces (seeds 1–3) are under `runs/examples/contrast/`. The pilot, freeze, sizing, and main-batch commands are in `research/protocol.md`. Nothing in that plan has been executed. Seeds 1000 and above wait on a freeze record. `n_per_group` is computed from the pilot spend log, not from a dry-run estimate.

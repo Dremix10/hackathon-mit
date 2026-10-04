@@ -40,7 +40,7 @@ class MemberAgent:
             result = self.backend.complete(
                 system=self.system,
                 user=text,
-                temperature=self.config.temperature if self.config.temperature is not None else 0.0,
+                temperature=self.config.temperature,
             )
         except Exception:
             if estimate:

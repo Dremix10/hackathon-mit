@@ -64,3 +64,18 @@ def price_tokens(model: str, tokens_in: int, tokens_out: int) -> float:
 def approx_tokens(text: str) -> int:
     """Character/4 estimate. The live API replaces this with usage counts."""
     return max(1, (len(text) + 3) // 4)
+
+
+def assumed_output_tokens(model: str) -> int:
+    """Output tokens priced per call, including low-effort thinking when billed.
+
+    Sonnet 5 bills adaptive thinking as output. ``effort=low`` often skips it.
+    The estimate still adds that allowance so a 350-token reply floor is not
+    the bill for a thinking model. The API ``max_tokens`` cap is larger; this
+    is the expected charge, not the cap.
+    """
+    from coop.agents.sampling import LOW_EFFORT_THINKING_TOKENS, rejects_sampling
+
+    if rejects_sampling(model):
+        return OUTPUT_TOKEN_FLOOR + LOW_EFFORT_THINKING_TOKENS
+    return OUTPUT_TOKEN_FLOOR

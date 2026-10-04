@@ -18,7 +18,7 @@ P0_COMMAND = (
 P1_COMMAND = (
     "python -m coop.batch dry-run --schedule pilot --batch-id pilot-001 "
     "--access earned --visibility deliverable_only --label-mode hidden "
-    "--model claude-sonnet-5 --temperature 0.0 --rounds 4,4,5,4,4 "
+    "--model claude-sonnet-5 --temperature default --rounds 4,4,5,4,4 "
     "--per-run-cap 3.0 --runs-root runs"
 )
 P1_FOLLOWUP = (

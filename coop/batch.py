@@ -20,7 +20,7 @@ The first real batch is a 10-run pilot on dev seeds. It is not confirmatory
 and it is not a five-arm Latin square: one run of each recruiter objective,
 three null, four pressure-only.
 
-    python -m coop.batch dry-run --schedule pilot --batch-id pilot-001 --model claude-sonnet-5 --temperature 0.0
+    python -m coop.batch dry-run --schedule pilot --batch-id pilot-001 --model claude-sonnet-5 --temperature default
     python -m coop.batch pilot-check --runs-root runs/pilot-001
     python -m coop.batch size --spend research/spend.md
     python -m coop.batch freeze --held-out-seeds pool --spend research/spend.md --frozen-config research/frozen_config.json
@@ -43,6 +43,7 @@ from typing import Any, Sequence
 from coop.agents.budget import Budget, BudgetExceeded, global_cap_from_env
 from coop.agents.detector import CONTROL_ARM, PREDICTED_DIRECTION
 from coop.agents.episode import load_events, observation_calls, run_episode
+from coop.agents.failures import failure_reason, mark_run_invalid
 from coop.agents.fallback_analysis import write_report
 from coop.agents.freeze import HELD_OUT_MIN, append_freeze, freeze_record, matching_freeze
 from coop.agents.llm import AnthropicLLM, MockLLM
@@ -58,15 +59,17 @@ from coop.agents.pricing import (
     CONTINGENCY,
     OUTPUT_TOKEN_FLOOR,
     approx_tokens,
+    assumed_output_tokens,
     price_tokens,
     rate_for,
 )
+from coop.agents.sampling import SAMPLING_MODEL_DEFAULT, rejects_sampling
 from coop.agents.prompts import find_banned, member_system, newcomer_system
 from coop.schema import ACCESSES, MODES, OBJECTIVES, VISIBILITIES, RunConfig
 from coop.sim.env import BudgetExceeded as SimBudgetExceeded
 
 DEFAULT_MODEL = "claude-sonnet-5"
-DEFAULT_TEMPERATURE = 0.0
+DEFAULT_TEMPERATURE = None
 DEFAULT_PER_RUN_CAP_USD = 3.0
 DEFAULT_RECRUITER_OBJECTIVE = "blame_avoidance"
 DEFAULT_THRESHOLD_USD = 25.0
@@ -127,6 +130,8 @@ def cmd_dry_run(args: argparse.Namespace) -> int:
     if frozen:
         return frozen
     estimate = _sweep(args, grid, backend_name="mock", dry_run=True)
+    if estimate.get("api_failure"):
+        return 2
     pending_path = Path(args.pending)
     pending = _pending_payload(args, grid, estimate)
     pending_path.parent.mkdir(parents=True, exist_ok=True)
@@ -207,6 +212,8 @@ def cmd_execute(args: argparse.Namespace) -> int:
     except (BudgetExceeded, SimBudgetExceeded) as exc:
         print(str(exc), file=sys.stderr)
         return 2
+    if estimate.get("api_failure"):
+        return 2
     note = getattr(args, "spend_note", "") or "execute"
     append_spend(
         spend_path,
@@ -270,6 +277,11 @@ def cmd_freeze(args: argparse.Namespace) -> int:
     direction = (args.predicted_direction or "").strip()
     if not direction:
         _die("--predicted-direction must be non-empty.")
+    if rejects_sampling(args.model) and args.temperature is not None:
+        _die(
+            f"{args.model} rejects temperature, top_p, and top_k. "
+            "Pass --temperature default. No API call was made."
+        )
     measured = _require_measured(args)
     if measured is None:
         return 2
@@ -283,16 +295,18 @@ def cmd_freeze(args: argparse.Namespace) -> int:
         seed=1,
         mode="pressure_only",
         rounds_per_stage=_parse_rounds(getattr(args, "rounds", "4,4,5,4,4")),
-        temperature=float(args.temperature),
+        temperature=args.temperature,
         model=args.model,
     )
     digest = config_sha256(probe)
+    sampling = SAMPLING_MODEL_DEFAULT if rejects_sampling(args.model) and args.temperature is None else None
     row = freeze_record(
         held_out_seeds=seeds,
         model=args.model,
         temperature=args.temperature,
         control_arm=control,
         predicted_direction=direction,
+        sampling=sampling,
     )
     row["config_sha256"] = digest
     row["measured_usd_per_run"] = measured
@@ -300,7 +314,10 @@ def cmd_freeze(args: argparse.Namespace) -> int:
     append_freeze(path, row)
     frozen_path = getattr(args, "frozen_config", "") or ""
     if frozen_path:
-        write_freeze(probe, Path(frozen_path))
+        frozen = Path(frozen_path)
+        write_freeze(probe, frozen)
+        if sampling:
+            _annotate_frozen_sampling(frozen, sampling)
     print(
         json.dumps(
             {
@@ -325,6 +342,11 @@ def cmd_freeze(args: argparse.Namespace) -> int:
 
 def cmd_size(args: argparse.Namespace) -> int:
     """Print n_per_group and the main-batch command from the pilot spend log."""
+    if rejects_sampling(args.model) and args.temperature is not None:
+        _die(
+            f"{args.model} rejects temperature, top_p, and top_k. "
+            "Pass --temperature default. No API call was made."
+        )
     measured = pilot_measurement(Path(args.spend))
     if measured is None:
         print(
@@ -373,7 +395,7 @@ def cmd_size(args: argparse.Namespace) -> int:
         f"COOP_BUDGET_USD={room:.0f} python -m coop.batch execute --schedule main "
         f"--seeds {seed_text} --batch-id {args.batch_id} "
         f"--access earned --visibility deliverable_only --label-mode hidden "
-        f"--model {args.model} --temperature {args.temperature} "
+        f"--model {args.model} --temperature {_temperature_flag(args.temperature)} "
         f"--rounds 4,4,5,4,4 --per-run-cap 3.0 --runs-root runs"
     )
     if room > DEFAULT_THRESHOLD_USD:
@@ -389,7 +411,12 @@ def cmd_size(args: argparse.Namespace) -> int:
         "formula": "floor((100 - pilot_spend - 10) / (3 * measured_usd_per_run))",
     }
     print(json.dumps(payload, indent=2, sort_keys=True))
-    print(f"Next freeze, if not already written: python -m coop.batch freeze --held-out-seeds pool --model {args.model} --temperature {args.temperature} --spend {args.spend} --frozen-config research/frozen_config.json")
+    print(
+        "Next freeze, if not already written: "
+        f"python -m coop.batch freeze --held-out-seeds pool --model {args.model} "
+        f"--temperature {_temperature_flag(args.temperature)} --spend {args.spend} "
+        "--frozen-config research/frozen_config.json"
+    )
     print(f"Main batch: {command}")
     print(f"After that batch: python -m coop.eval.report runs/{args.batch_id}")
     return 0
@@ -708,7 +735,7 @@ def _parser() -> argparse.ArgumentParser:
         command.add_argument("--label-mode", default="hidden", choices=LABEL_MODES)
         command.add_argument("--model", default=os.environ.get("COOP_MODEL", DEFAULT_MODEL))
         command.add_argument("--insider-model", default=None)
-        command.add_argument("--temperature", type=float, default=DEFAULT_TEMPERATURE)
+        command.add_argument("--temperature", type=temperature_arg, default="default")
         command.add_argument("--recruiter-objective", default=None)
         command.add_argument("--stage-scripts", default=None)
         command.add_argument("--run-tag", default="")
@@ -744,7 +771,7 @@ def _parser() -> argparse.ArgumentParser:
     freeze.add_argument("--control-arm", default=CONTROL_ARM)
     freeze.add_argument("--predicted-direction", default=PREDICTED_DIRECTION)
     freeze.add_argument("--model", default=os.environ.get("COOP_MODEL", DEFAULT_MODEL))
-    freeze.add_argument("--temperature", type=float, default=DEFAULT_TEMPERATURE)
+    freeze.add_argument("--temperature", type=temperature_arg, default="default")
     freeze.add_argument("--rounds", default="4,4,5,4,4")
     freeze.add_argument("--record", default=RECORD_NAME)
     freeze.add_argument("--spend", default=SPEND_NAME)
@@ -754,11 +781,38 @@ def _parser() -> argparse.ArgumentParser:
     size.add_argument("--spend", default=SPEND_NAME)
     size.add_argument("--pilot-runs", default="runs/pilot-001")
     size.add_argument("--model", default=os.environ.get("COOP_MODEL", DEFAULT_MODEL))
-    size.add_argument("--temperature", type=float, default=DEFAULT_TEMPERATURE)
+    size.add_argument("--temperature", type=temperature_arg, default="default")
     size.add_argument("--batch-id", default="main-001")
     check = sub.add_parser("pilot-check", help="T*/T** gate and candidate behaviors. Not confirmatory.")
     check.add_argument("--runs-root", default="runs/pilot-001")
     return parser
+
+
+def temperature_arg(value: str) -> float | None:
+    """``default`` omits sampling parameters. A number is a real temperature."""
+    text = value.strip().lower()
+    if text in {"default", "model_default"}:
+        return None
+    try:
+        return float(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(
+            "--temperature must be a number or default"
+        ) from exc
+
+
+def _temperature_flag(temperature: float | None) -> str:
+    if temperature is None:
+        return "default"
+    return str(temperature)
+
+
+def _annotate_frozen_sampling(path: Path, sampling: str) -> None:
+    """Record sampling beside the simulator hash. Temperature stays null."""
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["temperature"] = None
+    data["sampling"] = sampling
+    path.write_text(json.dumps(data, sort_keys=True, indent=2) + "\n", encoding="utf-8")
 
 
 def _die(message: str) -> None:
@@ -817,6 +871,11 @@ def _resolve(args: argparse.Namespace) -> None:
             args.spend_note = "main batch on held-out seeds"
     elif args.schedule:
         _die("--schedule must be pilot or main.")
+    if rejects_sampling(getattr(args, "model", "")) and args.temperature is not None:
+        _die(
+            f"{args.model} rejects temperature, top_p, and top_k. "
+            "Pass --temperature default. No API call was made."
+        )
     if getattr(args, "arm", None) and getattr(args, "mode", None):
         _die("Pass --arm or --mode, not both.")
     if getattr(args, "mode", None) and not getattr(args, "arm", None):
@@ -923,6 +982,7 @@ def _grid(args: argparse.Namespace) -> dict[str, Any]:
         "per_run_cap": args.per_run_cap,
         "rounds": list(_parse_rounds(args.rounds)),
         "run_tag": args.run_tag or "",
+        "sampling": SAMPLING_MODEL_DEFAULT if rejects_sampling(args.model) and args.temperature is None else None,
         "seeds": _seeds(args.seeds),
         "stage_scripts_token": _token(json.dumps(scripts, sort_keys=True, separators=(",", ":"))),
         "temperature": args.temperature,
@@ -1080,9 +1140,32 @@ def _sweep(
         if meta.get("aborted"):
             aborted.append(config.run_id or "")
             reason = meta.get("abort_reason") or ""
-            if reason.startswith("global"):
+            if isinstance(reason, str) and reason.startswith("global"):
                 break
         events = load_events(runs_root / config.run_id)
+        api_reason = failure_reason(events, meta)
+        if api_reason:
+            mark_run_invalid(runs_root / config.run_id, meta, api_reason)
+            message = (
+                f"{config.run_id}: {api_reason}. "
+                "Stopping the batch. This run is marked invalid in meta.json. "
+                "No further runs were started."
+            )
+            print(message, file=sys.stderr)
+            return {
+                "n_runs": len(configs),
+                "n_calls": n_calls,
+                "tokens_in": tokens_in,
+                "tokens_out_assumed": tokens_out_assumed,
+                "actual_usd": round(actual_usd, 6),
+                "estimated_usd": 0.0,
+                "priced_usd_before_contingency": round(priced_usd, 4),
+                "aborted": aborted,
+                "model": grid["model"],
+                "output_token_floor": assumed_output_tokens(grid["model"]),
+                "contingency": CONTINGENCY,
+                "api_failure": message,
+            }
         if dry_run:
             skip = {"a0"} if config.mode == "controlled" else set()
             for event in observation_calls(events, skip_actors=skip):
@@ -1090,7 +1173,7 @@ def _sweep(
                 rendered = str((event.get("payload") or {}).get("rendered") or "")
                 system_tokens = newcomer_tokens if actor == "a4" else member_tokens
                 call_in = system_tokens + approx_tokens(rendered)
-                assumed_out = OUTPUT_TOKEN_FLOOR
+                assumed_out = assumed_output_tokens(grid["model"])
                 n_calls += 1
                 tokens_in += call_in
                 tokens_out_assumed += assumed_out
@@ -1102,7 +1185,7 @@ def _sweep(
                 payload = event["payload"]
                 n_calls += 1
                 tokens_in += int(payload["tokens_in"])
-                assumed_out = max(int(payload["tokens_out"]), OUTPUT_TOKEN_FLOOR)
+                assumed_out = max(int(payload["tokens_out"]), assumed_output_tokens(grid["model"]))
                 tokens_out_assumed += assumed_out
                 actual_usd += float(payload["usd_cost"])
                 priced_usd += price_tokens(grid["model"], int(payload["tokens_in"]), assumed_out)
@@ -1117,7 +1200,7 @@ def _sweep(
         "priced_usd_before_contingency": round(priced_usd, 4),
         "aborted": aborted,
         "model": grid["model"],
-        "output_token_floor": OUTPUT_TOKEN_FLOOR,
+        "output_token_floor": assumed_output_tokens(grid["model"]),
         "contingency": CONTINGENCY,
     }
 
@@ -1154,7 +1237,7 @@ def _execute_command(args: argparse.Namespace, over: bool) -> str:
         [
             f"--label-mode {args.label_mode}",
             f"--model {args.model}",
-            f"--temperature {args.temperature}",
+            f"--temperature {_temperature_flag(args.temperature)}",
             f"--rounds {','.join(str(item) for item in _parse_rounds(args.rounds))}",
             f"--per-run-cap {args.per_run_cap}",
             f"--runs-root {args.runs_root}",
@@ -1192,13 +1275,13 @@ def _pending_payload(
         "tokens_out_assumed": estimate["tokens_out_assumed"],
         "approval_threshold_usd": threshold,
         "over_threshold": over,
-        "output_token_floor": OUTPUT_TOKEN_FLOOR,
+        "output_token_floor": estimate.get("output_token_floor", OUTPUT_TOKEN_FLOOR),
         "contingency": CONTINGENCY,
         "execute_command": _execute_command(args, over),
         "note": (
             "Dry-run used MockTarget and made no API calls. "
             "estimated_usd prices rendered observations at the rate card, "
-            f"assumes at least {OUTPUT_TOKEN_FLOOR} output tokens per call, "
+            f"assumes at least {estimate.get('output_token_floor', OUTPUT_TOKEN_FLOOR)} output tokens per call, "
             f"and adds a {CONTINGENCY} contingency. "
             + (
                 "Pilot schedule: 3 recruiter (one objective each), 3 null, "
@@ -1246,7 +1329,7 @@ def _pilot_usd(model: str, rounds: Any) -> float:
             label_mode="hidden",
             model=model,
             insider_model=None,
-            temperature=DEFAULT_TEMPERATURE,
+            temperature=None,
             recruiter_objective=None,
             stage_scripts=None,
             run_tag="",
