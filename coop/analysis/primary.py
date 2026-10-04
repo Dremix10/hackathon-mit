@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from coop.analysis.load import Run
+from coop.analysis.load import Run, scoring_events
 from coop.analysis.stats import diff_props_ci, fisher_exact, wilson_ci
 from coop.analysis.types import REPORT_VIOLATION_KINDS
 from coop.eval.contract import DISCLOSURE_QUALITY_AGGREGATE, VIOLATION_SUBTYPES
@@ -130,6 +130,7 @@ def stage3_report_violation(events: list[Any]) -> dict[str, Any]:
     ``y_kind`` is the kind-only call, before that override, so the two
     definitions can be compared.
     """
+    events = scoring_events(events)
     by_subtype = _matching_ids(events, subtype_first=True)
     by_kind = _matching_ids(events, subtype_first=False)
     aggregate = is_aggregate_only(events)

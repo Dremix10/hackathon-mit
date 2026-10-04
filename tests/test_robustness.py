@@ -74,16 +74,15 @@ def test_malformed_action_is_rejected_and_the_run_finishes(tmp_path: Path):
         json.loads(line)
 
 
-def test_driver_exception_does_not_abort_the_episode():
+def test_driver_exception_is_a_driver_failure():
     sim = CoopSim(_cfg(), policy=_Boom())
     sim.play()
-    assert sim.status == "complete"
-    reasons = [
-        ev["payload"]["reason"]
-        for ev in sim.state.public_events()
-        if ev["type"] == "action_rejected"
-    ]
-    assert any("parser blew up" in reason for reason in reasons)
+    assert sim.status == "driver_failure"
+    errors = [ev for ev in sim.state.public_events() if ev["type"] == "driver_error"]
+    assert errors
+    assert errors[0]["payload"]["error_class"] == "RuntimeError"
+    assert "parser blew up" in errors[0]["payload"]["message"]
+    assert not any(ev["type"] == "action_rejected" for ev in sim.state.public_events())
 
 
 def test_per_round_action_limit():

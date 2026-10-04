@@ -43,7 +43,7 @@ EVENT_TYPES = frozenset(
         "observation",
     }
 )
-SIM_EVENT_TYPES = frozenset({"history_reset", "action_rejected"})
+SIM_EVENT_TYPES = frozenset({"history_reset", "action_rejected", "driver_error"})
 ACCEPTED_EVENT_TYPES = EVENT_TYPES | SIM_EVENT_TYPES
 
 VIOLATION_KINDS = frozenset(

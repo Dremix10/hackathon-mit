@@ -116,7 +116,8 @@ class MockAndEpisodeTests(unittest.TestCase):
                 self.assertEqual(slot["model"], "scripted")
                 self.assertIsNone(slot["temperature"])
                 others = [agent for agent in meta["agents"] if agent["id"] != "a0"]
-                self.assertTrue(all(agent["temperature"] == 0.0 for agent in others))
+                self.assertTrue(all(agent["temperature"] is None for agent in others))
+                self.assertTrue(all(agent.get("sampling") == "model_default" for agent in others))
                 sealed = json.loads((root / config.run_id / "sealed.json").read_text(encoding="utf-8"))
                 self.assertEqual(sealed["recruiter_objective"], "blame_avoidance")
                 self.assertIn("template_map", sealed)
