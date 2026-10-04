@@ -19,7 +19,7 @@ from coop.analysis.leader import (
     leader_moves,
     newcomer_recruitment,
 )
-from coop.analysis.load import load_events, load_meta
+from coop.analysis.load import load_events, load_meta, scoring_events
 from coop.analysis.types import Event
 
 FORBIDDEN_META_KEYS = {
@@ -175,7 +175,7 @@ def strip_event(event: Event) -> Event:
 
 def events_for_classifier(events: list[Event]) -> list[Event]:
     """Events the scorer sees. Ladder ids and arm tokens in ids are gone."""
-    return [strip_event(event) for event in events]
+    return [strip_event(event) for event in scoring_events(events)]
 
 
 def _restore_ids(value: Any, mapping: dict[str, str]) -> Any:

@@ -12,10 +12,18 @@ import hashlib
 import json
 import os
 import subprocess
+import time
 from pathlib import Path
 from typing import Any
 
 from coop.schema import Action, ConfigError, RunConfig, principal_view
+from coop.sim.llm import (
+    DriverError,
+    backoff_seconds,
+    is_fatal_driver_error,
+    sampling_label,
+    sent_temperature,
+)
 from coop.sim.insider import ScriptedInsider
 from coop.sim.mock import MockTarget
 from coop.sim.observe import observation_event
@@ -69,6 +77,10 @@ class BudgetExceeded(RuntimeError):
     pass
 
 
+class DriverFailure(RuntimeError):
+    """The run stopped because the model driver failed. Status is not complete."""
+
+
 class CoopSim:
     def __init__(self, config: RunConfig, policy: Any | None = None) -> None:
         config.validate()
@@ -87,6 +99,10 @@ class CoopSim:
         self._violation_index: dict[tuple, dict[str, Any]] = {}
         self._prepared = False
         self.out_path: Path | None = None
+        self._pending_retries: dict[str, list[dict[str, Any]]] = {}
+        self._driver_stats: dict[str, dict[str, int]] = {}
+        self.driver_retries: list[dict[str, Any]] = []
+        self._sleep = time.sleep
 
     # --- setup ------------------------------------------------------------
 
@@ -195,31 +211,127 @@ class CoopSim:
         self.abort_reason = None
         try:
             self.prepare()
+            self._preflight()
             while not self.finished:
                 self.open_round()
                 if self.finished:
                     break
                 obs = self.current_observations()
                 actions: dict[str, Any] = {}
+                failed = False
                 for aid in self.target_ids():
                     try:
-                        actions[aid] = self.policy.act(aid, obs[aid])
+                        actions[aid] = self._act_with_retry(aid, obs[aid])
                     except BudgetExceeded:
                         raise
-                    except Exception as exc:
-                        self._reject(aid, "driver", f"driver error: {exc}")
-                        actions[aid] = []
+                    except DriverFailure as exc:
+                        self.status = "driver_failure"
+                        self.abort_reason = str(exc)
+                        self.finished = True
+                        failed = True
+                        break
+                if failed or self.status == "driver_failure":
+                    break
                 self.apply_actions(actions)
         except BudgetExceeded as exc:
             self.status = "aborted_budget"
             self.abort_reason = str(exc)
             self.aborted = True
             self.finished = True
+        except DriverFailure as exc:
+            self.status = "driver_failure"
+            self.abort_reason = str(exc)
+            self.finished = True
+        except DriverError as exc:
+            self.status = "driver_failure"
+            self.abort_reason = _driver_reason(exc)
+            self.finished = True
         except Exception as exc:
             self.status = "error"
             self.abort_reason = f"{type(exc).__name__}: {exc}"
             self.finished = True
         return self
+
+    def _preflight(self) -> None:
+        """One tiny call per distinct model, before round 1 emits events."""
+        policy = self.policy
+        probe = getattr(policy, "preflight", None)
+        if probe is None:
+            return
+        probe()
+
+    def _act_with_retry(self, aid: str, observation: dict[str, Any]) -> Any:
+        logged: list[dict[str, Any]] = []
+        last: DriverError | None = None
+        for attempt in range(1, 4):
+            if logged:
+                self._pending_retries[aid] = list(logged)
+            try:
+                result = self.policy.act(aid, observation)
+            except BudgetExceeded:
+                raise
+            except DriverError as exc:
+                last = exc
+                exc.attempt = max(exc.attempt, attempt)
+                if exc.retryable and attempt < 3 and not is_fatal_driver_error(exc):
+                    logged.append(_retry_record(exc))
+                    self._sleep(backoff_seconds(attempt))
+                    continue
+                self._note_driver_error(aid, exc)
+                return []
+            except Exception as exc:
+                wrapped = DriverError(
+                    str(exc),
+                    error_class=type(exc).__name__,
+                    attempt=attempt,
+                    retryable=False,
+                )
+                self._note_driver_error(aid, wrapped)
+                return []
+            self._note_driver_success(aid, logged)
+            return result
+        if last is not None:
+            self._note_driver_error(aid, last)
+        return []
+
+    def _note_driver_success(self, aid: str, logged: list[dict[str, Any]]) -> None:
+        stats = self._driver_stats.setdefault(aid, {"turns": 0, "errors": 0, "success": 0})
+        stats["turns"] += 1
+        stats["success"] += 1
+        if logged:
+            self.driver_retries.append({"actor": aid, "t": self.state.t, "retries": logged})
+
+    def _note_driver_error(self, aid: str, exc: DriverError) -> None:
+        self._emit_driver_error(aid, exc)
+        stats = self._driver_stats.setdefault(aid, {"turns": 0, "errors": 0, "success": 0})
+        stats["turns"] += 1
+        stats["errors"] += 1
+        if is_fatal_driver_error(exc) or self._driver_error_rate_exceeded(stats):
+            raise DriverFailure(_driver_reason(exc))
+
+    def _driver_error_rate_exceeded(self, stats: dict[str, int]) -> bool:
+        if stats["errors"] and stats["success"] == 0:
+            return True
+        turns = stats["turns"]
+        if not turns:
+            return False
+        return (stats["errors"] / turns) > float(self.config.max_driver_error_rate)
+
+    def _emit_driver_error(self, aid: str, exc: DriverError) -> None:
+        self._emit(
+            type_="driver_error",
+            actor=aid,
+            target=None,
+            channel="system",
+            payload={
+                "actor": aid,
+                "error_class": exc.error_class,
+                "status_code": exc.status_code,
+                "message": str(exc),
+                "attempt": exc.attempt,
+            },
+            ground_truth=None,
+        )
 
     def target_ids(self) -> list[str]:
         ids = self.state.active_ids()
@@ -797,15 +909,23 @@ class CoopSim:
         tokens_in: int,
         tokens_out: int,
         usd_cost: float,
+        attempts: int = 1,
+        retries: list[dict[str, Any]] | None = None,
     ) -> None:
         self.spent += float(usd_cost)
-        entry = {
+        if retries is None:
+            retries = self._pending_retries.pop(actor, None)
+        entry: dict[str, Any] = {
             "actor": actor,
             "model": model,
             "tokens_in": tokens_in,
             "tokens_out": tokens_out,
             "usd_cost": usd_cost,
         }
+        if retries:
+            entry["retries"] = retries
+        if attempts and int(attempts) != 1:
+            entry["attempts"] = int(attempts)
         insider = self.state.insider_id
         if (
             self.config.mode == "controlled"
@@ -867,7 +987,8 @@ class CoopSim:
             if controlled_slot and cfg.insider_driver == "scripted":
                 model, temperature = "scripted", None
             else:
-                model, temperature = cfg.model, cfg.temperature
+                model = cfg.model
+                temperature = sent_temperature(model, cfg.temperature)
             if model == "scripted":
                 family = "scripted"
             elif model == "mock":
@@ -881,6 +1002,9 @@ class CoopSim:
                 "temperature": temperature,
                 "family": family,
             }
+            label = sampling_label(model)
+            if label is not None:
+                entry["sampling"] = label
             if controlled_slot:
                 entry["slot"] = "insider"
             if aid == st.roles["newcomer"]:
@@ -998,6 +1122,20 @@ def _action_items(obj: Any) -> list[Any]:
     if isinstance(obj, list):
         return list(obj)
     return [obj]
+
+
+def _driver_reason(exc: DriverError) -> str:
+    status = f" HTTP {exc.status_code}" if exc.status_code is not None else ""
+    return f"{exc.error_class}{status}: {exc}"
+
+
+def _retry_record(exc: DriverError) -> dict[str, Any]:
+    return {
+        "attempt": exc.attempt,
+        "error_class": exc.error_class,
+        "status_code": exc.status_code,
+        "message": str(exc),
+    }
 
 
 def run_is_complete(directory: str | Path) -> bool:

@@ -98,6 +98,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-actions", type=int, default=8)
     parser.add_argument("--allow-unfrozen", action="store_true")
     parser.add_argument("--resume", action="store_true")
+    parser.add_argument(
+        "--redraw-failed",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Do not treat seed-log rows with status driver_failure or error as used (default: on).",
+    )
     parser.add_argument("--no-conflict", action="store_true")
     parser.add_argument("--reset-on-removal", action="store_true")
     parser.add_argument("--driver", choices=["scripted", "llm"], default="scripted")
@@ -139,6 +145,8 @@ def _batch_seeds(
     log_path: Path,
     prior_rows: list[dict[str, str]],
     resume: bool,
+    *,
+    redraw_failed: bool = True,
 ) -> list[int]:
     """Matched seeds. A resumed batch keeps seeds it already started."""
     split = canonical_split(split)
@@ -153,7 +161,7 @@ def _batch_seeds(
                 started.append(seed)
     if len(started) >= n:
         return started[:n]
-    used = used_seeds(log_path, split)
+    used = used_seeds(log_path, split, redraw_failed=redraw_failed)
     fresh = [seed for seed in registry.pools[split] if seed not in started and seed not in used]
     need = n - len(started)
     if len(fresh) < need:
@@ -182,7 +190,15 @@ def run_batch(args: argparse.Namespace) -> int:
     log_path = Path(args.seed_log)
     sealed_path_preview = Path(args.out) / "sealed_summary.csv"
     prior_preview = _read_sealed_rows(sealed_path_preview) if args.resume else []
-    seeds = _batch_seeds(args.split, args.n, registry, log_path, prior_preview, args.resume)
+    seeds = _batch_seeds(
+        args.split,
+        args.n,
+        registry,
+        log_path,
+        prior_preview,
+        args.resume,
+        redraw_failed=args.redraw_failed,
+    )
     arms = [part.strip() for part in args.arms.split(",") if part.strip()]
     if not arms:
         raise ConfigError("pass at least one arm")
@@ -240,6 +256,7 @@ def run_batch(args: argparse.Namespace) -> int:
                 split=args.split,
                 config_digest=digest,
                 allow_unfrozen=config.allow_unfrozen,
+                status=sim.status,
             )
             events = [json.loads(line) for line in (run_dir / "events.jsonl").read_text().splitlines() if line]
             meta = json.loads((run_dir / "meta.json").read_text())

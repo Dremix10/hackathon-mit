@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from coop.schema import MIN_ROUNDS_CONTROLLED, ConfigError, RunConfig
+from coop.sim.llm import sampling_label, sent_temperature
 from coop.sim.protocol import CHARTER_TEXT, canonical_templates, target_prompts
 
 
@@ -113,6 +114,7 @@ def resolve_seed(
     split: str | None,
     registry: SeedRegistry,
     log_path: Path,
+    redraw_failed: bool = True,
 ) -> tuple[int, str]:
     """Return ``(seed, split)`` with the split already canonical."""
     if split is not None:
@@ -121,7 +123,7 @@ def resolve_seed(
         raise ConfigError("pass --seed N from a declared range, or --split to draw the next seed")
     if seed is None:
         assert split is not None
-        return next_unused(split, registry, log_path), split
+        return next_unused(split, registry, log_path, redraw_failed=redraw_failed), split
     found = split_of(seed, registry)
     if found is None:
         raise ConfigError(f"seed {seed} is not in a declared split")
@@ -136,7 +138,16 @@ def _logged_split(value: Any) -> str | None:
     return SPLIT_ALIASES.get(value)
 
 
-def used_seeds(log_path: Path, split: str) -> set[int]:
+FAILED_LOG_STATUSES = frozenset({"driver_failure", "error"})
+
+
+def used_seeds(log_path: Path, split: str, *, redraw_failed: bool = True) -> set[int]:
+    """Seeds already consumed in ``split``.
+
+    Rows whose ``status`` is ``driver_failure`` or ``error`` are not used
+    when ``redraw_failed`` is true, so a dead pilot can be drawn again.
+    A row with no status is an older successful log line and stays used.
+    """
     want = canonical_split(split)
     used: set[int] = set()
     if not log_path.exists():
@@ -145,23 +156,34 @@ def used_seeds(log_path: Path, split: str) -> set[int]:
         if not line.strip():
             continue
         row = json.loads(line)
-        if _logged_split(row.get("split")) == want:
-            used.add(int(row["seed"]))
+        if _logged_split(row.get("split")) != want:
+            continue
+        status = row.get("status")
+        if redraw_failed and status in FAILED_LOG_STATUSES:
+            continue
+        used.add(int(row["seed"]))
     return used
 
 
-def next_unused(split: str, registry: SeedRegistry, log_path: Path) -> int:
+def next_unused(split: str, registry: SeedRegistry, log_path: Path, *, redraw_failed: bool = True) -> int:
     split = canonical_split(split)
-    used = used_seeds(log_path, split)
+    used = used_seeds(log_path, split, redraw_failed=redraw_failed)
     for seed in registry.pools[split]:
         if seed not in used:
             return seed
     raise ConfigError(f"no unused seeds left in {split}")
 
 
-def take_unused(split: str, n: int, registry: SeedRegistry, log_path: Path) -> list[int]:
+def take_unused(
+    split: str,
+    n: int,
+    registry: SeedRegistry,
+    log_path: Path,
+    *,
+    redraw_failed: bool = True,
+) -> list[int]:
     split = canonical_split(split)
-    used = used_seeds(log_path, split)
+    used = used_seeds(log_path, split, redraw_failed=redraw_failed)
     fresh = [seed for seed in registry.pools[split] if seed not in used]
     if len(fresh) < n:
         raise ConfigError(f"{split} has {len(fresh)} unused seeds, needed {n}")
@@ -204,7 +226,9 @@ def behavior_material(config: RunConfig) -> dict[str, Any]:
     ``target_prompts`` is the unsubstituted ``TARGET_PROMPT`` list.
     ``charter`` is ``CHARTER_TEXT``. ``protocol_templates`` is the full
     corpus from ``canonical_templates`` (every arm, so the hash does not
-    identify the selected objective). ``sim_git_sha`` is not an input.
+    identify the selected objective). ``temperature`` is the value actually
+    sent (null when the model rejects sampling params). ``sim_git_sha`` is
+    not an input.
     """
     material = {
         "target_prompts": target_prompts(),
@@ -212,7 +236,7 @@ def behavior_material(config: RunConfig) -> dict[str, Any]:
         "protocol_templates": canonical_templates(),
         "rounds_per_stage": list(config.rounds_per_stage),
         "model": config.model,
-        "temperature": config.temperature,
+        "temperature": sent_temperature(config.model, config.temperature),
         "sim_code_sha256": sim_code_sha256(),
     }
     if tuple(material) != HASH_FIELDS:
@@ -259,6 +283,7 @@ def append_log(
     split: str,
     config_digest: str,
     allow_unfrozen: bool = False,
+    status: str = "complete",
 ) -> None:
     log_path.parent.mkdir(parents=True, exist_ok=True)
     row = {
@@ -267,6 +292,7 @@ def append_log(
         "split": canonical_split(split),
         "config_sha256": config_digest,
         "allow_unfrozen": bool(allow_unfrozen),
+        "status": status,
         "timestamp": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
     with log_path.open("a", encoding="utf-8") as handle:
@@ -278,7 +304,8 @@ def write_freeze(config: RunConfig, path: Path) -> str:
     body = {
         "config_sha256": digest,
         "model": config.model,
-        "temperature": config.temperature,
+        "temperature": sent_temperature(config.model, config.temperature),
+        "sampling": sampling_label(config.model),
         "rounds_per_stage": list(config.rounds_per_stage),
         "sim_code_sha256": sim_code_sha256(),
     }

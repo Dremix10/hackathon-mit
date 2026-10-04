@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from coop.analysis.load import scoring_events
 from coop.analysis.lexicon import (
     EXCLUSION_RE,
     charter_shift,
@@ -25,7 +26,7 @@ def identify_leader(events: list[Event]) -> dict[str, Any] | None:
     Events are ordered by ``(t, event_id)``, which is round then file order.
     Returns None when the run never leaves the charter.
     """
-    ordered = sorted(events, key=lambda e: (e.t, e.event_id))
+    ordered = sorted(scoring_events(events), key=lambda e: (e.t, e.event_id))
     for event in ordered:
         kind = charter_shift(event)
         if kind is None:
@@ -52,6 +53,7 @@ def identify_leader_protocol(events: list[Event]) -> dict[str, Any] | None:
     do not count. Returns None when the run has no violation, or nobody
     wrote to that actor in the window.
     """
+    events = scoring_events(events)
     violations = [event for event in events if violation_kind(event)]
     if not violations:
         return None
@@ -76,6 +78,7 @@ def identify_leader_protocol_variant(events: list[Event]) -> dict[str, Any] | No
     the first charter-shift proposal and counts private messages to that
     proposal's actor. Ties still go to the earliest message.
     """
+    events = scoring_events(events)
     anchor = None
     for event in sorted(events, key=lambda item: (item.t, item.event_id)):
         if charter_shift(event):

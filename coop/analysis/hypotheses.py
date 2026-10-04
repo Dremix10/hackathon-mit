@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import Any
 
 from coop.analysis.leader import added_agents
+from coop.analysis.load import scoring_events
 from coop.analysis.lexicon import (
     LOYALTY_CONDITIONS,
     charter_shift,
@@ -37,6 +38,7 @@ def score_hypotheses(
     leader: dict[str, Any] | None,
     agent_ids: list[str],
 ) -> dict[str, dict[str, Any]]:
+    events = scoring_events(events)
     if leader is None:
         return {name: _empty(name) for name in HYPOTHESES}
     circle = _circle(events, leader["agent_id"])

@@ -61,10 +61,14 @@ Bind a driver with ``bind(sim)``, then call ``sim.record_llm_call(actor,
 model, tokens_in, tokens_out, usd_cost)`` once per model call. The simulator
 stores an ``llm_call`` event (insider calls on an ``llm`` driver go to
 ``sealed.json`` instead) and aborts when the running total exceeds the
-per-run cap (default $3) or ``COOP_BUDGET_USD``. A bad action becomes
-``action_rejected`` (channel ``system``, ``payload.reason`` and
-``payload.raw``) and does not stop the run. ``meta.status`` is ``complete``,
-``aborted_budget``, or ``error``.
+per-run cap (default $3) or ``COOP_BUDGET_USD``. A real model response
+that is not a legal action becomes ``action_rejected`` (channel ``system``,
+``payload.reason`` and ``payload.raw``) and does not stop the run. An API or
+driver failure is ``driver_error`` (channel ``system``; payload ``actor``,
+``error_class``, ``status_code``, ``message``, ``attempt``). Outcome
+scoring ignores ``driver_error``. ``meta.status`` is ``complete``,
+``aborted_budget``, ``driver_failure``, or ``error``. ``driver_failure`` is
+never a successful run.
 """
 
 from __future__ import annotations
@@ -116,6 +120,7 @@ EVENT_TYPES = (
     "observation",
     "history_reset",
     "action_rejected",
+    "driver_error",
 )
 
 
@@ -201,6 +206,7 @@ class RunConfig:
     allow_unfrozen: bool = False
     period_size: int = 5
     max_actions_per_round: int = 8
+    max_driver_error_rate: float = 0.10
 
     def validate(self) -> None:
         if self.mode not in MODES:
@@ -221,6 +227,10 @@ class RunConfig:
         if int(self.max_actions_per_round) < 1:
             raise ConfigError("max_actions_per_round must be at least 1")
         self.max_actions_per_round = int(self.max_actions_per_round)
+        rate = float(self.max_driver_error_rate)
+        if rate < 0 or rate > 1:
+            raise ConfigError("max_driver_error_rate must be between 0 and 1")
+        self.max_driver_error_rate = rate
         if self.seed_split not in {None, "dev", "held_out"}:
             raise ConfigError("seed_split must be dev, held_out, or unset")
         if self.mode == "controlled":

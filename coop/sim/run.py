@@ -66,6 +66,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--max-actions", type=int, default=8)
     parser.add_argument("--allow-unfrozen", action="store_true")
     parser.add_argument("--resume", action="store_true", help="Skip a run directory whose meta.status is already complete.")
+    parser.add_argument(
+        "--redraw-failed",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Do not treat seed-log rows with status driver_failure or error as used (default: on).",
+    )
     parser.add_argument("--registry", default=str(DEFAULT_REGISTRY))
     parser.add_argument("--seed-log", default=str(DEFAULT_LOG))
     parser.add_argument("--freeze", default=str(DEFAULT_FREEZE))
@@ -133,6 +139,7 @@ def main(argv: list[str] | None = None) -> int:
             split=args.split,
             registry=registry,
             log_path=Path(args.seed_log),
+            redraw_failed=args.redraw_failed,
         )
         config = config_from_args(args, seed, split)
         config.validate()
@@ -156,6 +163,7 @@ def main(argv: list[str] | None = None) -> int:
         split=split,
         config_digest=config_sha256(config),
         allow_unfrozen=config.allow_unfrozen,
+        status=sim.status,
     )
     print(out)
     return 0

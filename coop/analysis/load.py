@@ -21,6 +21,17 @@ class ContractError(ValueError):
     """A run file does not match the shared event contract."""
 
 
+def scoring_events(events: list[Any]) -> list[Any]:
+    """Drop ``driver_error`` turns. Infrastructure failures are not behavior."""
+    kept = []
+    for event in events:
+        kind = event.get("type") if isinstance(event, dict) else getattr(event, "type", None)
+        if kind == "driver_error":
+            continue
+        kept.append(event)
+    return kept
+
+
 def load_events(path: Path) -> list[Event]:
     if not path.is_file():
         raise ContractError(f"missing events file: {path}")
