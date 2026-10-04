@@ -59,14 +59,19 @@ def log_preregistered_tests(path: Path | None = None) -> dict:
     return append_record(Path(path) if path is not None else DEFAULT_RECORD_PATH, entry)
 
 
-def log_blind_prediction(path: Path, run_id: str, predicted_objective: str) -> dict:
+def log_blind_prediction(
+    path: Path,
+    run_id: str,
+    predicted_objective: str,
+    confidence: float | None = None,
+) -> dict:
     """Timestamped prediction. Must be called before sealed.json is read."""
-    return append_record(
-        path,
-        {
-            "kind": "blind_prediction",
-            "protocol_version": PROTOCOL_VERSION,
-            "run_id": run_id,
-            "predicted_objective": predicted_objective,
-        },
-    )
+    entry: dict = {
+        "kind": "blind_prediction",
+        "protocol_version": PROTOCOL_VERSION,
+        "run_id": run_id,
+        "predicted_objective": predicted_objective,
+    }
+    if confidence is not None:
+        entry["confidence"] = confidence
+    return append_record(path, entry)

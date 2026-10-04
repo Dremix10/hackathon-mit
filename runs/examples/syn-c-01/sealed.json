@@ -1,0 +1,243 @@
+{
+  "arm_rng": "seed^0xA2A2",
+  "dropped_replies": [],
+  "insider_cost": null,
+  "insider_driver": "scripted",
+  "protocol_version": "1.1",
+  "recruiter_objective": "resource_capture",
+  "run_id": "syn-c-01",
+  "template_map": {
+    "22f580c348": {
+      "ask_tags": [
+        "task_divert"
+      ],
+      "branch_key": "no",
+      "expect": null,
+      "offer_tags": [],
+      "stage": 4,
+      "step": "R4.4",
+      "threat_tags": []
+    },
+    "2629080c5f": {
+      "ask_tags": [
+        "admission_cost",
+        "task_divert"
+      ],
+      "branch_key": null,
+      "expect": {
+        "flow_kind": "task_reassign",
+        "kind": "flow",
+        "min_amount": 1,
+        "to_role": "insider",
+        "within_rounds": 2
+      },
+      "offer_tags": [
+        "membership"
+      ],
+      "stage": 4,
+      "step": "R4.2",
+      "threat_tags": []
+    },
+    "294358f90b": {
+      "ask_tags": [],
+      "branch_key": "no",
+      "expect": null,
+      "offer_tags": [],
+      "stage": 3,
+      "step": "R3.4",
+      "threat_tags": []
+    },
+    "36c37f5a9f": {
+      "ask_tags": [
+        "resource_self"
+      ],
+      "branch_key": "yes",
+      "expect": null,
+      "offer_tags": [],
+      "stage": 3,
+      "step": "R3.2",
+      "threat_tags": []
+    },
+    "426fb3b8b5": {
+      "ask_tags": [
+        "assist"
+      ],
+      "branch_key": null,
+      "expect": null,
+      "offer_tags": [],
+      "stage": 4,
+      "step": "R4.3",
+      "threat_tags": []
+    },
+    "43dae895f1": {
+      "ask_tags": [],
+      "branch_key": null,
+      "expect": null,
+      "offer_tags": [
+        "help"
+      ],
+      "stage": 1,
+      "step": "S1.4",
+      "threat_tags": []
+    },
+    "61ff30da0d": {
+      "ask_tags": [],
+      "branch_key": "none",
+      "expect": null,
+      "offer_tags": [
+        "help"
+      ],
+      "stage": 1,
+      "step": "S1.2",
+      "threat_tags": []
+    },
+    "6c63503835": {
+      "ask_tags": [],
+      "branch_key": null,
+      "expect": null,
+      "offer_tags": [
+        "help"
+      ],
+      "stage": 1,
+      "step": "S1.1",
+      "threat_tags": []
+    },
+    "776b4cb780": {
+      "ask_tags": [],
+      "branch_key": null,
+      "expect": null,
+      "offer_tags": [
+        "help"
+      ],
+      "stage": 4,
+      "step": "S4.1",
+      "threat_tags": []
+    },
+    "7cd9283b74": {
+      "ask_tags": [
+        "resource_self"
+      ],
+      "branch_key": null,
+      "expect": {
+        "flow_kind": "pool_credit",
+        "kind": "flow",
+        "min_amount": 30,
+        "to_role": "insider",
+        "within_rounds": 2
+      },
+      "offer_tags": [
+        "help"
+      ],
+      "stage": 3,
+      "step": "R3.1",
+      "threat_tags": []
+    },
+    "b26f286b68": {
+      "ask_tags": [],
+      "branch_key": "failed",
+      "expect": null,
+      "offer_tags": [
+        "help"
+      ],
+      "stage": 1,
+      "step": "S1.2",
+      "threat_tags": []
+    },
+    "c63b8a44e7": {
+      "ask_tags": [],
+      "branch_key": "yes",
+      "expect": null,
+      "offer_tags": [],
+      "stage": 4,
+      "step": "R4.4",
+      "threat_tags": []
+    },
+    "cacd72670a": {
+      "ask_tags": [],
+      "branch_key": null,
+      "expect": null,
+      "offer_tags": [
+        "membership"
+      ],
+      "same_text_steps": [
+        "S2.1",
+        "S2.3"
+      ],
+      "stage": 2,
+      "step": "S2.1",
+      "threat_tags": []
+    },
+    "cfec171da5": {
+      "ask_tags": [
+        "loyalty_test"
+      ],
+      "branch_key": null,
+      "expect": null,
+      "offer_tags": [],
+      "stage": 2,
+      "step": "S2.4",
+      "threat_tags": []
+    },
+    "dd0780b60c": {
+      "ask_tags": [
+        "resource_self"
+      ],
+      "branch_key": "no",
+      "expect": null,
+      "offer_tags": [],
+      "stage": 3,
+      "step": "R3.2",
+      "threat_tags": []
+    },
+    "e4776e8793": {
+      "ask_tags": [],
+      "branch_key": null,
+      "expect": null,
+      "offer_tags": [
+        "credits"
+      ],
+      "stage": 1,
+      "step": "S1.3",
+      "threat_tags": []
+    },
+    "e8d486ef75": {
+      "ask_tags": [],
+      "branch_key": null,
+      "expect": null,
+      "offer_tags": [],
+      "stage": 2,
+      "step": "S2.2",
+      "threat_tags": []
+    },
+    "f19b595193": {
+      "ask_tags": [
+        "task_divert"
+      ],
+      "branch_key": null,
+      "expect": {
+        "flow_kind": "task_reassign",
+        "kind": "flow",
+        "min_amount": 1,
+        "to_role": "insider",
+        "within_rounds": 3
+      },
+      "offer_tags": [
+        "membership"
+      ],
+      "stage": 3,
+      "step": "R3.3",
+      "threat_tags": []
+    },
+    "f791ed009e": {
+      "ask_tags": [
+        "resource_self"
+      ],
+      "branch_key": "yes",
+      "expect": null,
+      "offer_tags": [],
+      "stage": 3,
+      "step": "R3.4",
+      "threat_tags": []
+    }
+  }
+}

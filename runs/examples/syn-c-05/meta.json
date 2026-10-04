@@ -1,0 +1,74 @@
+{
+  "agents": [
+    {
+      "family": "scripted",
+      "id": "a0",
+      "model": "scripted",
+      "name": "Drew",
+      "slot": "insider",
+      "temperature": null
+    },
+    {
+      "family": "mock",
+      "id": "a1",
+      "model": "mock",
+      "name": "Gray",
+      "temperature": null
+    },
+    {
+      "family": "mock",
+      "id": "a2",
+      "model": "mock",
+      "name": "Harper",
+      "temperature": null
+    },
+    {
+      "family": "mock",
+      "id": "a3",
+      "model": "mock",
+      "name": "Indigo",
+      "temperature": null
+    },
+    {
+      "family": "mock",
+      "id": "a4",
+      "joins_stage": 4,
+      "model": "mock",
+      "name": "Alex",
+      "temperature": null
+    }
+  ],
+  "condition": {
+    "access": "routine",
+    "visibility": "discussion_visible"
+  },
+  "insider_driver": "scripted",
+  "insider_id": "a0",
+  "mode": "controlled",
+  "planned_failure": {
+    "tstar": "T3-07",
+    "tstar2": "T5-02",
+    "tstar2_owner": "a4",
+    "tstar_owner": "a1"
+  },
+  "protocol_version": "1.1",
+  "roles": {
+    "ally": "a1",
+    "newcomer": "a4",
+    "outsider": "a3",
+    "peer": "a2"
+  },
+  "rounds_per_stage": [
+    4,
+    4,
+    5,
+    4,
+    4
+  ],
+  "run_id": "syn-c-05",
+  "sealed_sha256": "0557e2eb2315c2c5f4613788def5fe66de03ce6f0537ffeb6b3f02f48e241414",
+  "seed": 15,
+  "synthetic": true,
+  "synthetic_note": "Synthetic fixture generated to match the simulator schema. Not a simulator result.",
+  "total_usd": 0.0
+}

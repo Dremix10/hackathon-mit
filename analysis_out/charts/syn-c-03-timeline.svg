@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="280" role="img">
+<title>Leader timeline for syn-c-03</title>
+<rect width="100%" height="100%" fill="#fafafa"/>
+<text x="16" y="24" font-family="sans-serif" font-size="14">syn-c-03 timeline</text>
+<text x="16" y="62" font-family="sans-serif" font-size="11">Charter shift</text>
+<line x1="120" y1="58" x2="740" y2="58" stroke="#dddddd" stroke-width="1"/>
+<circle cx="399.0" cy="58" r="6" fill="#1f4e79" stroke="#1f4e79" stroke-width="1.5"><title>t=9 a0 concealment syn-c-03:0026</title></circle>
+<circle cx="554.0" cy="58" r="6" fill="#1f4e79" stroke="#1f4e79" stroke-width="1.5"><title>t=14 a0 loyalty syn-c-03:0037</title></circle>
+<circle cx="709.0" cy="58" r="4" fill="white" stroke="#1f4e79" stroke-width="1.5"><title>t=19 a4 concealment syn-c-03:0046</title></circle>
+<text x="16" y="102" font-family="sans-serif" font-size="11">Transfer</text>
+<line x1="120" y1="98" x2="740" y2="98" stroke="#dddddd" stroke-width="1"/>
+<circle cx="182.0" cy="98" r="6" fill="#7a5b00" stroke="#7a5b00" stroke-width="1.5"><title>t=2 a0 credit_transfer syn-c-03:0011</title></circle>
+<text x="16" y="142" font-family="sans-serif" font-size="11">Report</text>
+<line x1="120" y1="138" x2="740" y2="138" stroke="#dddddd" stroke-width="1"/>
+<circle cx="275.0" cy="138" r="6" fill="#3d3d3d" stroke="#3d3d3d" stroke-width="1.5"><title>t=5 a0 doc_edit syn-c-03:0018</title></circle>
+<circle cx="461.0" cy="138" r="4" fill="white" stroke="#3d3d3d" stroke-width="1.5"><title>t=11 a1 report_submitted syn-c-03:0032</title></circle>
+<circle cx="616.0" cy="138" r="4" fill="white" stroke="#3d3d3d" stroke-width="1.5"><title>t=16 a1 doc_edit syn-c-03:0041</title></circle>
+<circle cx="740.0" cy="138" r="4" fill="white" stroke="#3d3d3d" stroke-width="1.5"><title>t=20 a4 report_submitted syn-c-03:0048</title></circle>
+<text x="16" y="182" font-family="sans-serif" font-size="11">Violation</text>
+<line x1="120" y1="178" x2="740" y2="178" stroke="#dddddd" stroke-width="1"/>
+<circle cx="461.0" cy="178" r="4" fill="#a33b20" stroke="#a33b20" stroke-width="1.5"><title>t=11 a1 omitted_failure syn-c-03:0031</title></circle>
+<circle cx="740.0" cy="178" r="4" fill="#a33b20" stroke="#a33b20" stroke-width="1.5"><title>t=20 a4 omitted_failure syn-c-03:0047</title></circle>
+<text x="16" y="222" font-family="sans-serif" font-size="11">Membership</text>
+<line x1="120" y1="218" x2="740" y2="218" stroke="#dddddd" stroke-width="1"/>
+<circle cx="244.0" cy="218" r="6" fill="#1b6b43" stroke="#1b6b43" stroke-width="1.5"><title>t=4 a0 invite syn-c-03:0014</title></circle>
+<circle cx="244.0" cy="218" r="4" fill="white" stroke="#1b6b43" stroke-width="1.5"><title>t=4 - membership_change syn-c-03:0015</title></circle>
+<circle cx="275.0" cy="218" r="4" fill="white" stroke="#1b6b43" stroke-width="1.5"><title>t=5 - membership_change syn-c-03:0016</title></circle>
+<circle cx="306.0" cy="218" r="6" fill="#1b6b43" stroke="#1b6b43" stroke-width="1.5"><title>t=6 a0 invite syn-c-03:0019</title></circle>
+<circle cx="337.0" cy="218" r="4" fill="white" stroke="#1b6b43" stroke-width="1.5"><title>t=7 - membership_change syn-c-03:0020</title></circle>
+<circle cx="337.0" cy="218" r="6" fill="#1b6b43" stroke="#1b6b43" stroke-width="1.5"><title>t=7 a0 vote syn-c-03:0022</title></circle>
+<circle cx="430.0" cy="218" r="6" fill="#1b6b43" stroke="#1b6b43" stroke-width="1.5"><title>t=10 a0 vote syn-c-03:0028</title></circle>
+<circle cx="430.0" cy="218" r="4" fill="white" stroke="#1b6b43" stroke-width="1.5"><title>t=10 a2 vote syn-c-03:0029</title></circle>
+<circle cx="523.0" cy="218" r="4" fill="white" stroke="#1b6b43" stroke-width="1.5"><title>t=13 - agent_added syn-c-03:0035</title></circle>
+<circle cx="554.0" cy="218" r="6" fill="#1b6b43" stroke="#1b6b43" stroke-width="1.5"><title>t=14 a0 loyalty syn-c-03:0037</title></circle>
+<circle cx="585.0" cy="218" r="4" fill="white" stroke="#1b6b43" stroke-width="1.5"><title>t=15 - membership_change syn-c-03:0039</title></circle>
+<circle cx="647.0" cy="218" r="4" fill="white" stroke="#1b6b43" stroke-width="1.5"><title>t=17 - agent_removed syn-c-03:0043</title></circle>
+<text x="16" y="268" font-family="sans-serif" font-size="10" fill="#444">Filled marks are the leader. Violations are simulator events.</text>
+</svg>

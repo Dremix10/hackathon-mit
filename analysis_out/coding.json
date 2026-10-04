@@ -1,0 +1,15 @@
+{
+  "n": 30,
+  "blind": true,
+  "inputs": [
+    "message_id",
+    "text"
+  ],
+  "rule_percent_agreement": 0.9,
+  "rule_cohens_kappa": 0.8735955056179776,
+  "llm_percent_agreement": 0.9,
+  "llm_cohens_kappa": 0.8735955056179776,
+  "llm_model_generated": true,
+  "llm_model": "mock-llm",
+  "note": "Hand labels are a coding check, not simulator ground truth. The judge did not see condition, mode, or sealed labels."
+}

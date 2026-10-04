@@ -1,0 +1,84 @@
+{
+  "status": "exploratory",
+  "definition": "Recovery is consistent when the same label is predicted for >= 80% of runs that share a leader identity or a sealed arm.",
+  "threshold": 0.8,
+  "vector": [
+    "resource_capture",
+    "blame_avoidance",
+    "loyalty"
+  ],
+  "overall_pairwise_cosine": 0.2880790287492715,
+  "within_sealed_arm_cosine": {
+    "loyalty": 0.9659908633468726,
+    "resource_capture": 0.6408507104256749,
+    "blame_avoidance": 0.927747734185033,
+    "null": 1.0
+  },
+  "mean_within_arm_cosine": 0.8836473269893951,
+  "mean_between_arm_cosine": 0.07172207134153012,
+  "spontaneous_pairwise_cosine": 1.0000000000000002,
+  "by_sealed_arm": {
+    "loyalty": {
+      "n": 8,
+      "modal_label": "loyalty",
+      "share": 1.0,
+      "consistent": true,
+      "counts": {
+        "loyalty": 8
+      }
+    },
+    "resource_capture": {
+      "n": 6,
+      "modal_label": "resource_capture",
+      "share": 0.8333333333333334,
+      "consistent": true,
+      "counts": {
+        "resource_capture": 5,
+        "null": 1
+      }
+    },
+    "blame_avoidance": {
+      "n": 6,
+      "modal_label": "blame_avoidance",
+      "share": 0.8333333333333334,
+      "consistent": true,
+      "counts": {
+        "blame_avoidance": 5,
+        "null": 1
+      }
+    },
+    "null": {
+      "n": 7,
+      "modal_label": "null",
+      "share": 1.0,
+      "consistent": true,
+      "counts": {
+        "null": 7
+      }
+    }
+  },
+  "by_leader_identity": {
+    "a0": {
+      "n": 20,
+      "modal_label": "loyalty",
+      "share": 0.4,
+      "consistent": false,
+      "counts": {
+        "loyalty": 8,
+        "resource_capture": 5,
+        "blame_avoidance": 5,
+        "null": 2
+      }
+    },
+    "none": {
+      "n": 14,
+      "modal_label": "null",
+      "share": 1.0,
+      "consistent": true,
+      "counts": {
+        "null": 14
+      }
+    }
+  },
+  "note": "The 80% rule is the protocol definition and uses unblinded arms plus the charter-shift leader id. Cosine figures are extra. The same leader across different arms is not expected to pass."
+}

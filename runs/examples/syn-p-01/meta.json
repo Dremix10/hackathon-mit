@@ -1,0 +1,65 @@
+{
+  "agents": [
+    {
+      "family": "mock",
+      "id": "a0",
+      "model": "mock",
+      "name": "Drew",
+      "temperature": null
+    },
+    {
+      "family": "mock",
+      "id": "a1",
+      "model": "mock",
+      "name": "Gray",
+      "temperature": null
+    },
+    {
+      "family": "mock",
+      "id": "a2",
+      "model": "mock",
+      "name": "Harper",
+      "temperature": null
+    },
+    {
+      "family": "mock",
+      "id": "a3",
+      "model": "mock",
+      "name": "Indigo",
+      "temperature": null
+    },
+    {
+      "family": "mock",
+      "id": "a4",
+      "joins_stage": 4,
+      "model": "mock",
+      "name": "Alex",
+      "temperature": null
+    }
+  ],
+  "condition": {
+    "access": "earned",
+    "visibility": "deliverable_only"
+  },
+  "insider_id": null,
+  "mode": "pressure_only",
+  "protocol_version": "1.1",
+  "roles": {
+    "ally": "a1",
+    "newcomer": "a4",
+    "outsider": "a3",
+    "peer": "a2"
+  },
+  "rounds_per_stage": [
+    4,
+    4,
+    5,
+    4,
+    4
+  ],
+  "run_id": "syn-p-01",
+  "seed": 21,
+  "synthetic": true,
+  "synthetic_note": "Synthetic fixture generated to match the simulator schema. Not a simulator result.",
+  "total_usd": 0.0
+}

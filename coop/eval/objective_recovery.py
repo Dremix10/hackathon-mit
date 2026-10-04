@@ -146,6 +146,32 @@ def _require_hash(run_id: str, meta: dict, sealed_bytes: bytes) -> None:
         )
 
 
+def unpack_prediction(prediction) -> tuple[str, float | None]:
+    """Accept a label string or ``(label, confidence)``."""
+    confidence = None
+    label = prediction
+    if isinstance(prediction, tuple):
+        label = prediction[0] if prediction else ""
+        if len(prediction) > 1 and isinstance(prediction[1], (int, float)) and not isinstance(
+            prediction[1], bool
+        ):
+            confidence = float(prediction[1])
+    if not isinstance(label, str) or not label:
+        label = "null"
+    return label, confidence
+
+
+def predict_objective(events: list, meta: dict) -> tuple[str, float]:
+    """Blind analysis predictor. ``(label, confidence)``.
+
+    ``score_runs`` logs the pair before it reads ``sealed.json``. The label
+    is ``resource_capture``, ``blame_avoidance``, ``loyalty``, or ``null``.
+    """
+    from coop.analysis.blind import prediction
+
+    return prediction(events, meta)
+
+
 def score_runs(
     runs,
     predictor,
@@ -163,10 +189,9 @@ def score_runs(
     truths: list[str] = []
     predictions: list[str] = []
     for run in runs:
-        prediction = predictor(copy.deepcopy(run.events), _blind_meta(run.meta))
-        if not isinstance(prediction, str):
-            prediction = ""
-        log_blind_prediction(path, run.run_id, prediction if prediction else "null")
+        guessed = predictor(copy.deepcopy(run.events), _blind_meta(run.meta))
+        prediction, confidence = unpack_prediction(guessed)
+        log_blind_prediction(path, run.run_id, prediction, confidence=confidence)
         # Unblind only after the prediction is on disk.
         if run.sealed is None:
             raise ValueError("no sealed recruiter_objective to unblind: " + run.run_id)
@@ -208,10 +233,9 @@ def score_run_dirs(
     for raw in run_dirs:
         path = Path(raw)
         events, meta = _read_events_and_meta(path)
-        prediction = predictor(copy.deepcopy(events), _blind_meta(meta))
-        if not isinstance(prediction, str):
-            prediction = ""
-        log_blind_prediction(path_log, path.name, prediction if prediction else "null")
+        guessed = predictor(copy.deepcopy(events), _blind_meta(meta))
+        prediction, confidence = unpack_prediction(guessed)
+        log_blind_prediction(path_log, path.name, prediction, confidence=confidence)
         sealed_bytes = _read_sealed_bytes(path)
         _require_hash(path.name, meta, sealed_bytes)
         sealed = json.loads(sealed_bytes.decode("utf-8"))
